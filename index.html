@@ -1,0 +1,298 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>List Manager v19 - Quick Move</title>
+<style>
+:root{--bg:#e1e1db;--card:#F5F5F0;--acc:#0078D7;--bdr:#ababab;--red:#d32f2f;--pur:#673ab7;--hl:#fff176;--ora:#ef6c00;--grn:#2e7d32;--fs:14px;--rh:36px}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);padding:20px;display:flex;flex-direction:column;align-items:center;margin:0}
+.toolbar{background:var(--card);padding:12px;border-radius:8px;margin-bottom:20px;box-shadow:0 2px 5px rgba(0,0,0,.2);display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;position:sticky;top:10px;z-index:100}
+.sbox{display:flex;flex-direction:column;font-size:11px;font-weight:bold;width:90px}
+.workspace{display:flex;gap:15px;width:100%;justify-content:center;flex-wrap:wrap}
+.pane{background:var(--card);padding:12px;border:2px solid transparent;border-radius:6px;display:flex;flex-direction:column;height:82vh;box-shadow:0 4px 10px rgba(0,0,0,.1);transition:border-color .15s}
+.active-pane{border-color:var(--acc)!important;background:#fff}
+
+/* List container */
+.lc{flex-grow:1;overflow-y:auto;border:1px solid #ccc;background:#fff;margin-bottom:10px;padding:0 4px;display:flex;flex-direction:column;contain:strict}
+.lc::-webkit-scrollbar{width:8px}.lc::-webkit-scrollbar-thumb{background:#888;border-radius:5px}
+
+/* Item Row */
+.ir{display:flex;gap:2px;align-items:center;background:#f9f9f9;min-height:var(--rh);max-height:var(--rh);padding:2px;border-radius:4px;border:1px solid #eee;margin-bottom:1px;box-sizing:border-box}
+.ir:hover{background:#f0f4ff}
+.ii{border:none;padding:4px;font-weight:bold;background:transparent;flex-grow:1;min-width:20px;font-size:var(--fs);height:100%}
+
+/* Action Buttons */
+.act-grp{display:flex;gap:1px;align-items:center;padding-left:4px;border-left:1px solid #ddd}
+.rb{border:1px solid var(--bdr);font-size:10px;cursor:pointer;font-weight:bold;border-radius:3px;padding:4px 3px;min-width:22px;background:#fff;line-height:1}
+.rb:hover{background:#eee;border-color:#888}
+.db{color:var(--red)}
+.cb{color:var(--grn)}
+.mv-btn{color:var(--acc);background:#e3f2fd;border-color:#90caf9}
+
+/* Header UI */
+.sb{font-size:10px;padding:2px 6px;border-radius:10px;margin-left:auto;background:#e0e0e0;color:#444;font-weight:bold}
+.ph-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-bottom:8px}
+.ph-grid button, .ph-grid select{font-size:10px;padding:5px 2px;font-weight:bold}
+
+/* Modals */
+#mo{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999}
+.modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:20px;border-radius:12px;z-index:1000;width:90%;max-width:600px}
+textarea{width:100%;padding:10px;font-family:monospace;border:1px solid #ccc;font-size:13px;box-sizing:border-box}
+
+#progBar{height:3px;background:var(--acc);position:fixed;top:0;left:0;z-index:9999;width:0}
+</style>
+</head>
+<body>
+<div id="mo" onclick="closeModal()"></div>
+<div id="progBar"></div>
+
+<!-- Join Modal -->
+<div id="joinModal" class="modal">
+  <h3 style="margin:0 0 10px">📄 Join Items</h3>
+  <div style="display:flex;gap:10px;background:#f5f5f0;padding:10px;border-radius:6px;border:1px solid #ddd;flex-wrap:wrap;font-size:12px;margin-bottom:10px">
+    <div>Char: <input id="joinChar" value="," oninput="refreshJoin()" style="width:40px"></div>
+    <div>Mode: 
+      <select id="joinMode" onchange="refreshJoin()">
+        <option value="prefix">Prefix</option><option value="suffix">Suffix</option>
+        <option value="sep">Separator</option><option value="wrap">Wrap</option>
+      </select>
+    </div>
+    <label><input type="checkbox" id="joinTrim" onchange="refreshJoin()" checked> Trim Spaces</label>
+    <button onclick="toggleRand()" id="randBtn">🔀 Random</button>
+  </div>
+  <textarea id="joinResult" rows="10" readonly></textarea>
+  <div style="margin-top:10px;display:flex;gap:10px">
+    <button style="background:var(--acc);color:#fff;border:none;flex:1" onclick="copyJoin()">📋 Copy Result</button>
+    <button onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<div class="toolbar">
+  <button onclick="undo()">↩️ Undo</button>
+  <button style="background:var(--acc);color:#fff;border:none" onclick="addPane()">➕ New Pane</button>
+  <div class="sbox"><label>Font: <span id="fsV">14</span>px</label><input type="range" min="8" max="30" value="14" oninput="setFS(this.value)"></div>
+  <div class="sbox"><label>Width: <span id="pwV">380</span>px</label><input type="range" min="250" max="600" value="380" oninput="setPW(this.value)"></div>
+  <input type="text" id="gSearch" placeholder="Search all..." oninput="dRefresh()" style="padding:6px;width:120px">
+  <button style="background:var(--ora);color:#fff;border:none" onclick="dedupeGlobal()">✨ Unique (Global)</button>
+  <button onclick="exportD()">💾 Save</button>
+  <button onclick="document.getElementById('iFile').click()">📂 Load</button>
+  <input type="file" id="iFile" style="display:none" onchange="importD(event)">
+</div>
+
+<div class="workspace" id="ws"></div>
+
+<script>
+let S = JSON.parse(localStorage.getItem('lm19')) || {
+  lists:[
+    {id:1,name:"List 1",items:["Apple","Banana"]},
+    {id:2,name:"List 2",items:["Carrot"]}
+  ],
+  fs:14, pw:380
+};
+let H=[], aP=0;
+
+const dSave=()=>localStorage.setItem('lm19',JSON.stringify(S));
+const hist=()=>{ H.push(JSON.stringify(S)); if(H.length>15)H.shift(); };
+
+/* ══ ITEM ROW ══ */
+function makeRow(lI,t,iI,sq){
+  const row=document.createElement('div');
+  row.className='ir';
+  
+  const inp=document.createElement('input');
+  inp.className='ii'+(sq&&t.toLowerCase().includes(sq)?' mf':'');
+  inp.value=t;
+  inp.oninput=e=>{S.lists[lI].items[iI]=e.target.value;dSave()};
+
+  const actions = document.createElement('div');
+  actions.className = 'act-grp';
+  
+  const btn = (icon, title, cl, fn) => {
+    const b = document.createElement('button');
+    b.className = 'rb ' + (cl||'');
+    b.innerHTML = icon; b.title = title;
+    b.onclick = (e) => { e.stopPropagation(); fn(e); };
+    return b;
+  };
+
+  // Quick Move Logic
+  const canPrev = lI > 0;
+  const canNext = lI < S.lists.length - 1;
+
+  actions.append(
+    // Move First
+    btn('|&lt;', `Move to: ${S.lists[0].name}`, 'mv-btn', () => quickMove(lI, iI, 0)),
+    // Move Prev
+    btn('&lt;', canPrev ? `Move to: ${S.lists[lI-1].name}` : 'No previous pane', 'mv-btn', () => canPrev && quickMove(lI, iI, lI-1)),
+    // Move Next
+    btn('&gt;', canNext ? `Move to: ${S.lists[lI+1].name}` : 'No next pane', 'mv-btn', () => canNext && quickMove(lI, iI, lI+1)),
+    // Move Last
+    btn('&gt;|', `Move to: ${S.lists[S.lists.length-1].name}`, 'mv-btn', () => quickMove(lI, iI, S.lists.length-1)),
+    // Standard Actions
+    btn('📋', 'Copy', 'cb', () => navigator.clipboard.writeText(t)),
+    btn('✕', 'Delete', 'db', () => { hist(); S.lists[lI].items.splice(iI, 1); renderPane(lI); })
+  );
+
+  row.append(inp, actions);
+  return row;
+}
+
+function quickMove(srcI, itemI, targetI) {
+  if (srcI === targetI) return;
+  hist();
+  const item = S.lists[srcI].items.splice(itemI, 1)[0];
+  S.lists[targetI].items.push(item);
+  renderPane(srcI);
+  renderPane(targetI);
+  dSave();
+}
+
+/* ══ VIRTUAL SCROLL ══ */
+const ROW_H=37;
+function renderPane(lI){
+  const L = S.lists[lI];
+  const c = document.getElementById(`lc${lI}`);
+  if(!c) return;
+  const sq = document.getElementById('gSearch').value.toLowerCase();
+  const items = sq ? L.items.map((t,i)=>({t,i})).filter(x=>x.t.toLowerCase().includes(sq)) : L.items.map((t,i)=>({t,i}));
+  
+  const totalH = items.length * ROW_H;
+  const start = Math.floor(c.scrollTop / ROW_H);
+  const end = start + Math.ceil(c.clientHeight / ROW_H) + 5;
+
+  c.innerHTML = `<div style="height:${totalH}px;position:relative"></div>`;
+  const container = c.firstChild;
+  
+  items.slice(start, end).forEach((item, idx) => {
+    const r = makeRow(lI, item.t, item.i, sq);
+    r.style.position = 'absolute';
+    r.style.top = (start + idx) * ROW_H + 'px';
+    r.style.width = '100%';
+    container.appendChild(r);
+  });
+  updateBadge(lI);
+}
+
+/* ══ HEADERS ══ */
+function buildHeader(i){
+  const L = S.lists[i], pane = document.getElementById(`pf${i}`);
+  pane.innerHTML = `
+    <div style="display:flex;align-items:center;margin-bottom:5px;gap:5px">
+      <input value="${L.name}" oninput="S.lists[${i}].name=this.value;dSave()" style="font-weight:bold;border:none;background:transparent;width:100px;font-size:14px">
+      <span class="sb">0</span>
+      <button onclick="copyPane(${i})" title="Copy All Items">📋</button>
+      <button onclick="removePane(${i})" style="color:red;border:none;background:none;font-weight:bold">✕</button>
+    </div>
+    <div class="ph-grid">
+      <button style="background:var(--acc);color:#fff;border:none" onclick="addBulk(${i})">+ Bulk</button>
+      <button style="background:var(--ora);color:#fff;border:none" onclick="joinItems(${i})">Join</button>
+      <button onclick="dedupePane(${i})">Uniq</button>
+      <button onclick="addItem(${i})">+ Line</button>
+      <select onchange="handleSort(${i}, this.value)">
+        <option value="">Sort...</option>
+        <option value="az">A-Z</option><option value="za">Z-A</option>
+        <option value="lenA">Len ↑</option><option value="lenD">Len ↓</option>
+        <option value="rand">Shuffle</option>
+      </select>
+      <button onclick="moveWC(${i},'top')">M-Top</button>
+      <button onclick="moveWC(${i},'bot')">M-End</button>
+      <button onclick="clearList(${i})" style="color:red">Clear</button>
+    </div>
+    <div id="lc${i}" class="lc" onscroll="renderPane(${i})"></div>
+  `;
+}
+
+/* ══ LOGIC ══ */
+function addPane(){ hist(); S.lists.push({id:Date.now(),name:"List "+(S.lists.length+1),items:[]}); initWS(); }
+function removePane(i){ if(S.lists.length>1 && confirm("Delete?")){ hist(); S.lists.splice(i,1); initWS(); } }
+function addItem(i){ hist(); S.lists[i].items.push(''); renderPane(i); }
+function copyPane(i){ navigator.clipboard.writeText(S.lists[i].items.join('\n')); alert('Pane copied!'); }
+function clearList(i){ if(confirm("Clear?")){ hist(); S.lists[i].items=[]; renderPane(i); } }
+function undo(){ if(H.length){S=JSON.parse(H.pop());initWS();} }
+
+function handleSort(i, mode){
+  if(!mode) return; hist();
+  const list = S.lists[i].items;
+  if(mode==='az') list.sort((a,b)=>a.localeCompare(b));
+  if(mode==='za') list.sort((a,b)=>b.localeCompare(a));
+  if(mode==='lenA') list.sort((a,b)=>a.length - b.length);
+  if(mode==='lenD') list.sort((a,b)=>b.length - a.length);
+  if(mode==='rand') list.sort(()=>Math.random()-0.5);
+  renderPane(i); dSave();
+}
+
+function dedupePane(i){ hist(); S.lists[i].items = [...new Set(S.lists[i].items)]; renderPane(i); dSave(); }
+function dedupeGlobal(){
+  hist(); let seen = new Set();
+  S.lists.forEach(l => {
+    l.items = l.items.filter(item => {
+      if(!item.trim()) return true;
+      if(seen.has(item)) return false;
+      seen.add(item); return true;
+    });
+  });
+  initWS(); dSave();
+}
+
+function addBulk(i){
+  const b = prompt("Paste items (one per line):");
+  if(b){ hist(); S.lists[i].items.push(...b.split('\n').filter(x=>x.trim())); renderPane(i); dSave(); }
+}
+
+/* ══ JOIN ══ */
+let _jIdx=0;
+function joinItems(i){ _jIdx=i; refreshJoin(); showModal('joinModal'); }
+function refreshJoin(){
+  const trim = document.getElementById('joinTrim').checked;
+  let items = S.lists[_jIdx].items.filter(x=>x.trim());
+  if(trim) items = items.map(x=>x.trim());
+  const ch = document.getElementById('joinChar').value;
+  const mode = document.getElementById('joinMode').value;
+  let res = "";
+  if(mode==='prefix') res = items.map(x=>ch+x).join('\n');
+  else if(mode==='suffix') res = items.map(x=>x+ch).join('\n');
+  else if(mode==='sep') res = items.join(ch);
+  else if(mode==='wrap') res = items.map(x=>ch+x+ch).join('\n');
+  document.getElementById('joinResult').value = res;
+}
+
+/* ══ UI CORE ══ */
+function initWS(){
+  const ws = document.getElementById('ws'); ws.innerHTML='';
+  S.lists.forEach((_,i)=>{
+    const p = document.createElement('div'); p.id=`pf${i}`; p.className='pane';
+    p.style.width=S.pw+'px'; p.onclick=()=>setActive(i);
+    ws.appendChild(p); buildHeader(i); renderPane(i);
+  });
+}
+function setActive(i){ aP=i; document.querySelectorAll('.pane').forEach((p,j)=>p.classList.toggle('active-pane',j===i)); }
+function updateBadge(i){ 
+  const b = document.querySelector(`#pf${i} .sb`); 
+  if(b) b.textContent = S.lists[i].items.length.toLocaleString(); 
+}
+function setFS(v){ S.fs=v; document.getElementById('fsV').textContent=v; document.documentElement.style.setProperty('--fs',v+'px'); }
+function setPW(v){ S.pw=v; document.getElementById('pwV').textContent=v; document.querySelectorAll('.pane').forEach(p=>p.style.width=v+'px'); }
+function showModal(id){ document.getElementById('mo').style.display='block'; document.getElementById(id).style.display='block'; }
+function closeModal(){ document.querySelectorAll('.modal,#mo').forEach(e=>e.style.display='none'); }
+function copyJoin(){ navigator.clipboard.writeText(document.getElementById('joinResult').value); alert('Copied!'); }
+const dRefresh=()=>{ S.lists.forEach((_,i)=>renderPane(i)); };
+function exportD(){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(S)]));
+  a.download='lists_v19.json'; a.click();
+}
+function importD(e){
+  const r=new FileReader(); r.onload=ev=>{ S=JSON.parse(ev.target.result); initWS(); };
+  r.readAsText(e.target.files[0]);
+}
+function moveWC(i,dir){
+  hist(); const m=[],sg=[];
+  S.lists[i].items.forEach(x=>(x.includes(' ')?m:sg).push(x));
+  S.lists[i].items=dir==='top'?[...m,...sg]:[...sg,...m];
+  renderPane(i);
+}
+
+initWS();
+</script>
+</body>
+</html>
