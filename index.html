@@ -1,298 +1,806 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>List Manager v19 - Quick Move</title>
-<style>
-:root{--bg:#e1e1db;--card:#F5F5F0;--acc:#0078D7;--bdr:#ababab;--red:#d32f2f;--pur:#673ab7;--hl:#fff176;--ora:#ef6c00;--grn:#2e7d32;--fs:14px;--rh:36px}
-body{font-family:'Segoe UI',sans-serif;background:var(--bg);padding:20px;display:flex;flex-direction:column;align-items:center;margin:0}
-.toolbar{background:var(--card);padding:12px;border-radius:8px;margin-bottom:20px;box-shadow:0 2px 5px rgba(0,0,0,.2);display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;position:sticky;top:10px;z-index:100}
-.sbox{display:flex;flex-direction:column;font-size:11px;font-weight:bold;width:90px}
-.workspace{display:flex;gap:15px;width:100%;justify-content:center;flex-wrap:wrap}
-.pane{background:var(--card);padding:12px;border:2px solid transparent;border-radius:6px;display:flex;flex-direction:column;height:82vh;box-shadow:0 4px 10px rgba(0,0,0,.1);transition:border-color .15s}
-.active-pane{border-color:var(--acc)!important;background:#fff}
-
-/* List container */
-.lc{flex-grow:1;overflow-y:auto;border:1px solid #ccc;background:#fff;margin-bottom:10px;padding:0 4px;display:flex;flex-direction:column;contain:strict}
-.lc::-webkit-scrollbar{width:8px}.lc::-webkit-scrollbar-thumb{background:#888;border-radius:5px}
-
-/* Item Row */
-.ir{display:flex;gap:2px;align-items:center;background:#f9f9f9;min-height:var(--rh);max-height:var(--rh);padding:2px;border-radius:4px;border:1px solid #eee;margin-bottom:1px;box-sizing:border-box}
-.ir:hover{background:#f0f4ff}
-.ii{border:none;padding:4px;font-weight:bold;background:transparent;flex-grow:1;min-width:20px;font-size:var(--fs);height:100%}
-
-/* Action Buttons */
-.act-grp{display:flex;gap:1px;align-items:center;padding-left:4px;border-left:1px solid #ddd}
-.rb{border:1px solid var(--bdr);font-size:10px;cursor:pointer;font-weight:bold;border-radius:3px;padding:4px 3px;min-width:22px;background:#fff;line-height:1}
-.rb:hover{background:#eee;border-color:#888}
-.db{color:var(--red)}
-.cb{color:var(--grn)}
-.mv-btn{color:var(--acc);background:#e3f2fd;border-color:#90caf9}
-
-/* Header UI */
-.sb{font-size:10px;padding:2px 6px;border-radius:10px;margin-left:auto;background:#e0e0e0;color:#444;font-weight:bold}
-.ph-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-bottom:8px}
-.ph-grid button, .ph-grid select{font-size:10px;padding:5px 2px;font-weight:bold}
-
-/* Modals */
-#mo{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999}
-.modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:20px;border-radius:12px;z-index:1000;width:90%;max-width:600px}
-textarea{width:100%;padding:10px;font-family:monospace;border:1px solid #ccc;font-size:13px;box-sizing:border-box}
-
-#progBar{height:3px;background:var(--acc);position:fixed;top:0;left:0;z-index:9999;width:0}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Smart Lists - Drag Splitter + Item Drag & Drop</title>
+  <!-- SortableJS for smooth drag/drop reorder & cross-pane movement -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+  <style>
+    * {
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    :root {
+      --bg: #e1e1db;
+      --card: #F5F5F0;
+      --acc: #0078D7;
+      --bdr: #ababab;
+      --red: #d32f2f;
+      --fs: 14px;
+      --rh: 44px;
+      --split: 50%;
+      --handle-width: 10px;
+    }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      touch-action: pan-y;
+    }
+    /* Toolbar */
+    .toolbar {
+      background: var(--card);
+      padding: 8px 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(2px);
+    }
+    button, .layout-btn {
+      background: white;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 40px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      transition: 0.1s;
+      font-size: 13px;
+    }
+    button:active { transform: scale(0.96); background: #e9e9e9; }
+    .btn-group {
+      display: flex;
+      gap: 6px;
+      background: #e0ddd5;
+      padding: 4px 6px;
+      border-radius: 48px;
+    }
+    .sbox {
+      display: flex;
+      flex-direction: column;
+      font-size: 10px;
+      font-weight: bold;
+      background: rgba(0,0,0,0.06);
+      padding: 4px 12px;
+      border-radius: 30px;
+      align-items: center;
+      gap: 3px;
+    }
+    /* Workspace flex + splitter */
+    .workspace {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      gap: 0;
+      overflow: hidden;
+    }
+    .pane-left {
+      width: var(--split);
+      min-width: 90px;
+      background: var(--card);
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.1);
+      border: 1px solid #ddd;
+    }
+    .pane-right {
+      flex: 1;
+      min-width: 90px;
+      background: var(--card);
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.1);
+      border: 1px solid #ddd;
+    }
+    /* Split Handle - immediate drag (no long press) */
+    .split-handle {
+      width: var(--handle-width);
+      background: #b0aea5;
+      margin: 0 4px;
+      border-radius: 20px;
+      cursor: ew-resize;
+      touch-action: none;
+      flex-shrink: 0;
+      transition: background 0.1s;
+      position: relative;
+    }
+    .split-handle:active {
+      background: var(--acc);
+      box-shadow: 0 0 0 2px rgba(0,120,215,0.3);
+    }
+    .split-handle::after {
+      content: "⋮⋮";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      color: #3a3a35;
+      letter-spacing: -2px;
+      pointer-events: none;
+    }
+    /* Pane header */
+    .pane-header {
+      padding: 10px 12px;
+      border-bottom: 2px solid #e2dfd7;
+      background: #fffbf4;
+    }
+    .pane-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .pane-name {
+      font-weight: bold;
+      border: none;
+      background: transparent;
+      font-size: 16px;
+      width: 110px;
+      padding: 4px 0;
+      border-bottom: 1px dashed #aaa;
+    }
+    .stats-badge {
+      font-size: 9px;
+      background: #2c2c28;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 40px;
+      display: flex;
+      gap: 10px;
+      font-weight: 500;
+    }
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .action-grid button, .action-grid select {
+      font-size: 10px;
+      padding: 6px 0;
+      font-weight: bold;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 30px;
+      cursor: pointer;
+    }
+    /* List container (Sortable) */
+    .sortable-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 4px;
+      min-height: 100px;
+      background: #fffef8;
+      margin: 6px;
+      border-radius: 16px;
+    }
+    /* Item row styling */
+    .item-row {
+      display: flex;
+      align-items: center;
+      background: white;
+      border-radius: 14px;
+      margin-bottom: 6px;
+      padding: 0 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      border: 1px solid #efede5;
+      transition: 0.05s linear;
+      cursor: grab;
+    }
+    .item-row:active {
+      cursor: grabbing;
+    }
+    .item-text {
+      flex: 1;
+      padding: 10px 8px;
+      font-size: var(--fs);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      background: transparent;
+      border: none;
+    }
+    .item-text:focus {
+      outline: 2px solid var(--acc);
+      background: #fff9c6;
+      border-radius: 12px;
+      white-space: normal;
+    }
+    .row-buttons {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .row-buttons button {
+      background: transparent;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 6px 6px;
+      border-radius: 40px;
+      width: 32px;
+      font-weight: bold;
+      transition: 0.05s;
+    }
+    .row-buttons button:active {
+      background: #ddd;
+      transform: scale(0.92);
+    }
+    .delete-btn { color: #d32f2f; }
+    .rename-btn { color: #2c6e9e; }
+    .up-btn, .down-btn { color: #4b6e3b; font-weight: bold; }
+    /* Modal */
+    #mo {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 999;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 32px;
+      z-index: 1000;
+      width: 85%;
+      max-width: 460px;
+      box-shadow: 0 20px 35px rgba(0,0,0,0.3);
+    }
+    textarea {
+      width: 100%;
+      border-radius: 20px;
+      border: 1px solid #ccc;
+      padding: 12px;
+      font-family: monospace;
+    }
+    @media (max-width: 550px) {
+      .row-buttons button { font-size: 14px; width: 28px; padding: 4px; }
+      .item-text { font-size: 12px; }
+      .action-grid { gap: 3px; }
+    }
+    .sortable-drag {
+      opacity: 0.6;
+      background: #b8d9ff;
+      box-shadow: 0 5px 12px black;
+    }
+  </style>
 </head>
 <body>
 <div id="mo" onclick="closeModal()"></div>
-<div id="progBar"></div>
-
-<!-- Join Modal -->
-<div id="joinModal" class="modal">
-  <h3 style="margin:0 0 10px">📄 Join Items</h3>
-  <div style="display:flex;gap:10px;background:#f5f5f0;padding:10px;border-radius:6px;border:1px solid #ddd;flex-wrap:wrap;font-size:12px;margin-bottom:10px">
-    <div>Char: <input id="joinChar" value="," oninput="refreshJoin()" style="width:40px"></div>
-    <div>Mode: 
-      <select id="joinMode" onchange="refreshJoin()">
-        <option value="prefix">Prefix</option><option value="suffix">Suffix</option>
-        <option value="sep">Separator</option><option value="wrap">Wrap</option>
-      </select>
-    </div>
-    <label><input type="checkbox" id="joinTrim" onchange="refreshJoin()" checked> Trim Spaces</label>
-    <button onclick="toggleRand()" id="randBtn">🔀 Random</button>
-  </div>
-  <textarea id="joinResult" rows="10" readonly></textarea>
-  <div style="margin-top:10px;display:flex;gap:10px">
-    <button style="background:var(--acc);color:#fff;border:none;flex:1" onclick="copyJoin()">📋 Copy Result</button>
-    <button onclick="closeModal()">Close</button>
-  </div>
-</div>
-
 <div class="toolbar">
-  <button onclick="undo()">↩️ Undo</button>
-  <button style="background:var(--acc);color:#fff;border:none" onclick="addPane()">➕ New Pane</button>
-  <div class="sbox"><label>Font: <span id="fsV">14</span>px</label><input type="range" min="8" max="30" value="14" oninput="setFS(this.value)"></div>
-  <div class="sbox"><label>Width: <span id="pwV">380</span>px</label><input type="range" min="250" max="600" value="380" oninput="setPW(this.value)"></div>
-  <input type="text" id="gSearch" placeholder="Search all..." oninput="dRefresh()" style="padding:6px;width:120px">
-  <button style="background:var(--ora);color:#fff;border:none" onclick="dedupeGlobal()">✨ Unique (Global)</button>
-  <button onclick="exportD()">💾 Save</button>
-  <button onclick="document.getElementById('iFile').click()">📂 Load</button>
-  <input type="file" id="iFile" style="display:none" onchange="importD(event)">
+  <div class="btn-group">
+    <button onclick="undo()">↩️ Undo</button>
+    <button onclick="redo()">↪️ Redo</button>
+  </div>
+  <button onclick="addNewPane()">➕ Add Pane</button>
+  <button onclick="cycleLayoutPreset()" style="background:#2c5f8a; color:white">🔄 Layouts</button>
+  <div class="sbox">
+    <label>🔤 Font <span id="fsV">14</span>px</label>
+    <input type="range" min="10" max="22" value="14" oninput="setGlobalFont(this.value)">
+  </div>
+  <div class="sbox">
+    <label>📐 Split: <span id="spV">50</span>%</label>
+    <input type="range" min="18" max="82" value="50" oninput="setSplitFromSlider(this.value)">
+  </div>
+  <button onclick="exportBackup()">💾 Backup</button>
 </div>
 
-<div class="workspace" id="ws"></div>
+<div class="workspace" id="workspaceRoot"></div>
+
+<div id="joinModal" class="modal">
+  <h3 style="margin:0 0 12px">📋 Export list content</h3>
+  <textarea id="joinResult" rows="10" readonly></textarea>
+  <button onclick="closeModal()" style="width:100%; margin-top:12px; padding:10px">Close</button>
+</div>
 
 <script>
-let S = JSON.parse(localStorage.getItem('lm19')) || {
-  lists:[
-    {id:1,name:"List 1",items:["Apple","Banana"]},
-    {id:2,name:"List 2",items:["Carrot"]}
-  ],
-  fs:14, pw:380
-};
-let H=[], aP=0;
-
-const dSave=()=>localStorage.setItem('lm19',JSON.stringify(S));
-const hist=()=>{ H.push(JSON.stringify(S)); if(H.length>15)H.shift(); };
-
-/* ══ ITEM ROW ══ */
-function makeRow(lI,t,iI,sq){
-  const row=document.createElement('div');
-  row.className='ir';
-  
-  const inp=document.createElement('input');
-  inp.className='ii'+(sq&&t.toLowerCase().includes(sq)?' mf':'');
-  inp.value=t;
-  inp.oninput=e=>{S.lists[lI].items[iI]=e.target.value;dSave()};
-
-  const actions = document.createElement('div');
-  actions.className = 'act-grp';
-  
-  const btn = (icon, title, cl, fn) => {
-    const b = document.createElement('button');
-    b.className = 'rb ' + (cl||'');
-    b.innerHTML = icon; b.title = title;
-    b.onclick = (e) => { e.stopPropagation(); fn(e); };
-    return b;
+  // ---------- DATA MODEL (max 2 panes but can be extended but we keep 2) ----------
+  let S = JSON.parse(localStorage.getItem('smart_split_drag')) || {
+    lists: [
+      { id: 1, name: "Left", items: ["Drag me ⇅", "Long tap & drag to reorder", "Drop anywhere"] },
+      { id: 2, name: "Right", items: ["Resize splitter (hold & drag)", "Use ↑↓ ✏️ 🗑️", "Cycle layouts"] }
+    ],
+    fs: 14,
+    split: 50
   };
-
-  // Quick Move Logic
-  const canPrev = lI > 0;
-  const canNext = lI < S.lists.length - 1;
-
-  actions.append(
-    // Move First
-    btn('|&lt;', `Move to: ${S.lists[0].name}`, 'mv-btn', () => quickMove(lI, iI, 0)),
-    // Move Prev
-    btn('&lt;', canPrev ? `Move to: ${S.lists[lI-1].name}` : 'No previous pane', 'mv-btn', () => canPrev && quickMove(lI, iI, lI-1)),
-    // Move Next
-    btn('&gt;', canNext ? `Move to: ${S.lists[lI+1].name}` : 'No next pane', 'mv-btn', () => canNext && quickMove(lI, iI, lI+1)),
-    // Move Last
-    btn('&gt;|', `Move to: ${S.lists[S.lists.length-1].name}`, 'mv-btn', () => quickMove(lI, iI, S.lists.length-1)),
-    // Standard Actions
-    btn('📋', 'Copy', 'cb', () => navigator.clipboard.writeText(t)),
-    btn('✕', 'Delete', 'db', () => { hist(); S.lists[lI].items.splice(iI, 1); renderPane(lI); })
-  );
-
-  row.append(inp, actions);
-  return row;
-}
-
-function quickMove(srcI, itemI, targetI) {
-  if (srcI === targetI) return;
-  hist();
-  const item = S.lists[srcI].items.splice(itemI, 1)[0];
-  S.lists[targetI].items.push(item);
-  renderPane(srcI);
-  renderPane(targetI);
-  dSave();
-}
-
-/* ══ VIRTUAL SCROLL ══ */
-const ROW_H=37;
-function renderPane(lI){
-  const L = S.lists[lI];
-  const c = document.getElementById(`lc${lI}`);
-  if(!c) return;
-  const sq = document.getElementById('gSearch').value.toLowerCase();
-  const items = sq ? L.items.map((t,i)=>({t,i})).filter(x=>x.t.toLowerCase().includes(sq)) : L.items.map((t,i)=>({t,i}));
+  // Ensure exactly 2 panes for split UI
+  if (S.lists.length > 2) S.lists = S.lists.slice(0,2);
+  while(S.lists.length < 2) S.lists.push({ id: Date.now(), name: `Pane ${S.lists.length+1}`, items: [] });
   
-  const totalH = items.length * ROW_H;
-  const start = Math.floor(c.scrollTop / ROW_H);
-  const end = start + Math.ceil(c.clientHeight / ROW_H) + 5;
-
-  c.innerHTML = `<div style="height:${totalH}px;position:relative"></div>`;
-  const container = c.firstChild;
+  let historyStack = [];
+  let redoStack = [];
+  let sortableInstances = []; // store Sortable instances
+  let leftContainer, rightContainer, leftSortableDiv, rightSortableDiv;
+  let leftPaneDiv, rightPaneDiv, splitHandle, workspaceRoot;
   
-  items.slice(start, end).forEach((item, idx) => {
-    const r = makeRow(lI, item.t, item.i, sq);
-    r.style.position = 'absolute';
-    r.style.top = (start + idx) * ROW_H + 'px';
-    r.style.width = '100%';
-    container.appendChild(r);
-  });
-  updateBadge(lI);
-}
-
-/* ══ HEADERS ══ */
-function buildHeader(i){
-  const L = S.lists[i], pane = document.getElementById(`pf${i}`);
-  pane.innerHTML = `
-    <div style="display:flex;align-items:center;margin-bottom:5px;gap:5px">
-      <input value="${L.name}" oninput="S.lists[${i}].name=this.value;dSave()" style="font-weight:bold;border:none;background:transparent;width:100px;font-size:14px">
-      <span class="sb">0</span>
-      <button onclick="copyPane(${i})" title="Copy All Items">📋</button>
-      <button onclick="removePane(${i})" style="color:red;border:none;background:none;font-weight:bold">✕</button>
-    </div>
-    <div class="ph-grid">
-      <button style="background:var(--acc);color:#fff;border:none" onclick="addBulk(${i})">+ Bulk</button>
-      <button style="background:var(--ora);color:#fff;border:none" onclick="joinItems(${i})">Join</button>
-      <button onclick="dedupePane(${i})">Uniq</button>
-      <button onclick="addItem(${i})">+ Line</button>
-      <select onchange="handleSort(${i}, this.value)">
-        <option value="">Sort...</option>
-        <option value="az">A-Z</option><option value="za">Z-A</option>
-        <option value="lenA">Len ↑</option><option value="lenD">Len ↓</option>
-        <option value="rand">Shuffle</option>
-      </select>
-      <button onclick="moveWC(${i},'top')">M-Top</button>
-      <button onclick="moveWC(${i},'bot')">M-End</button>
-      <button onclick="clearList(${i})" style="color:red">Clear</button>
-    </div>
-    <div id="lc${i}" class="lc" onscroll="renderPane(${i})"></div>
-  `;
-}
-
-/* ══ LOGIC ══ */
-function addPane(){ hist(); S.lists.push({id:Date.now(),name:"List "+(S.lists.length+1),items:[]}); initWS(); }
-function removePane(i){ if(S.lists.length>1 && confirm("Delete?")){ hist(); S.lists.splice(i,1); initWS(); } }
-function addItem(i){ hist(); S.lists[i].items.push(''); renderPane(i); }
-function copyPane(i){ navigator.clipboard.writeText(S.lists[i].items.join('\n')); alert('Pane copied!'); }
-function clearList(i){ if(confirm("Clear?")){ hist(); S.lists[i].items=[]; renderPane(i); } }
-function undo(){ if(H.length){S=JSON.parse(H.pop());initWS();} }
-
-function handleSort(i, mode){
-  if(!mode) return; hist();
-  const list = S.lists[i].items;
-  if(mode==='az') list.sort((a,b)=>a.localeCompare(b));
-  if(mode==='za') list.sort((a,b)=>b.localeCompare(a));
-  if(mode==='lenA') list.sort((a,b)=>a.length - b.length);
-  if(mode==='lenD') list.sort((a,b)=>b.length - a.length);
-  if(mode==='rand') list.sort(()=>Math.random()-0.5);
-  renderPane(i); dSave();
-}
-
-function dedupePane(i){ hist(); S.lists[i].items = [...new Set(S.lists[i].items)]; renderPane(i); dSave(); }
-function dedupeGlobal(){
-  hist(); let seen = new Set();
-  S.lists.forEach(l => {
-    l.items = l.items.filter(item => {
-      if(!item.trim()) return true;
-      if(seen.has(item)) return false;
-      seen.add(item); return true;
+  function saveLocal() { localStorage.setItem('smart_split_drag', JSON.stringify(S)); }
+  function pushHistory() {
+    historyStack.push(JSON.stringify(S));
+    if(historyStack.length > 40) historyStack.shift();
+    redoStack = [];
+  }
+  function undo() {
+    if(historyStack.length) {
+      redoStack.push(JSON.stringify(S));
+      S = JSON.parse(historyStack.pop());
+      while(S.lists.length < 2) S.lists.push({ id: Date.now(), name: `Pane`, items: [] });
+      if(S.lists.length > 2) S.lists = S.lists.slice(0,2);
+      fullRebuildUI();
+      saveLocal();
+    }
+  }
+  function redo() {
+    if(redoStack.length) {
+      historyStack.push(JSON.stringify(S));
+      S = JSON.parse(redoStack.pop());
+      while(S.lists.length < 2) S.lists.push({ id: Date.now(), name: `Pane`, items: [] });
+      if(S.lists.length > 2) S.lists = S.lists.slice(0,2);
+      fullRebuildUI();
+      saveLocal();
+    }
+  }
+  
+  // Helper: update stats display
+  function updateStatsUI(paneIdx) {
+    const list = S.lists[paneIdx];
+    const totalChars = list.items.reduce((s,it)=> s + it.length,0);
+    const uniqueCount = new Set(list.items).size;
+    const statsSpan = document.querySelector(`#stats-${paneIdx}`);
+    if(statsSpan) statsSpan.innerHTML = `<span>📋 ${list.items.length}</span><span>🔤 ${totalChars}</span><span>✨ ${uniqueCount}</span>`;
+  }
+  
+  // Render items from S into DOM (preserve Sortable)
+  function renderListFromModel(paneIdx, containerElement) {
+    if(!containerElement) return;
+    containerElement.innerHTML = '';
+    const itemsArray = S.lists[paneIdx].items;
+    for(let i=0; i<itemsArray.length; i++) {
+      const itemText = itemsArray[i];
+      const row = document.createElement('div');
+      row.className = 'item-row';
+      row.setAttribute('data-idx', i);
+      // Editable span (contenteditable? but we use input for better control)
+      const textSpan = document.createElement('div');
+      textSpan.className = 'item-text';
+      textSpan.contentEditable = 'false';
+      textSpan.innerText = itemText;
+      textSpan.setAttribute('data-original', itemText);
+      // Buttons container
+      const btnGroup = document.createElement('div');
+      btnGroup.className = 'row-buttons';
+      
+      const upBtn = document.createElement('button');
+      upBtn.innerHTML = '▲';
+      upBtn.title = 'Move up';
+      upBtn.className = 'up-btn';
+      const downBtn = document.createElement('button');
+      downBtn.innerHTML = '▼';
+      downBtn.title = 'Move down';
+      downBtn.className = 'down-btn';
+      const renameBtn = document.createElement('button');
+      renameBtn.innerHTML = '✏️';
+      renameBtn.title = 'Rename';
+      renameBtn.className = 'rename-btn';
+      const delBtn = document.createElement('button');
+      delBtn.innerHTML = '🗑️';
+      delBtn.title = 'Delete';
+      delBtn.className = 'delete-btn';
+      
+      // event handlers
+      upBtn.onclick = (e) => { e.stopPropagation(); moveItemUp(paneIdx, i); };
+      downBtn.onclick = (e) => { e.stopPropagation(); moveItemDown(paneIdx, i); };
+      renameBtn.onclick = (e) => { e.stopPropagation(); activateInlineRename(textSpan, paneIdx, i); };
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteItem(paneIdx, i); };
+      
+      btnGroup.append(upBtn, downBtn, renameBtn, delBtn);
+      row.append(textSpan, btnGroup);
+      containerElement.appendChild(row);
+    }
+    updateStatsUI(paneIdx);
+  }
+  
+  // Inline rename
+  function activateInlineRename(spanElem, paneIdx, itemIdx) {
+    const oldVal = S.lists[paneIdx].items[itemIdx];
+    const input = document.createElement('input');
+    input.value = oldVal;
+    input.style.width = '80%';
+    input.style.padding = '6px';
+    input.style.fontSize = 'var(--fs)';
+    input.style.borderRadius = '20px';
+    input.style.border = '2px solid var(--acc)';
+    spanElem.style.display = 'none';
+    spanElem.parentNode.insertBefore(input, spanElem);
+    input.focus();
+    const finish = () => {
+      const newVal = input.value.trim() === "" ? oldVal : input.value;
+      if(newVal !== oldVal) {
+        pushHistory();
+        S.lists[paneIdx].items[itemIdx] = newVal;
+        saveLocal();
+        fullRebuildUI();
+      } else {
+        spanElem.style.display = 'block';
+        input.remove();
+      }
+    };
+    input.onblur = finish;
+    input.onkeydown = (e) => { if(e.key === 'Enter') { finish(); } };
+  }
+  
+  function moveItemUp(paneIdx, idx) {
+    if(idx === 0) return;
+    pushHistory();
+    const arr = S.lists[paneIdx].items;
+    [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]];
+    saveLocal();
+    fullRebuildUI();
+  }
+  function moveItemDown(paneIdx, idx) {
+    if(idx === S.lists[paneIdx].items.length-1) return;
+    pushHistory();
+    const arr = S.lists[paneIdx].items;
+    [arr[idx+1], arr[idx]] = [arr[idx], arr[idx+1]];
+    saveLocal();
+    fullRebuildUI();
+  }
+  function deleteItem(paneIdx, idx) {
+    pushHistory();
+    const removed = S.lists[paneIdx].items.splice(idx,1)[0];
+    // optional: send to opposite pane? but user may expect just removal, but we can keep removal only.
+    // but to be safe, we just delete.
+    saveLocal();
+    fullRebuildUI();
+  }
+  
+  // Handle cross-pane drag & reorder using Sortable events
+  function initSortable() {
+    if(sortableInstances.length) sortableInstances.forEach(s => s.destroy());
+    const leftEl = document.getElementById('sortable-left');
+    const rightEl = document.getElementById('sortable-right');
+    if(!leftEl || !rightEl) return;
+    
+    const groupConfig = {
+      name: 'shared',
+      pull: true,
+      revertClone: false,
+      put: true
+    };
+    const sortableLeft = new Sortable(leftEl, {
+      group: groupConfig,
+      animation: 200,
+      handle: '.item-row',
+      draggable: '.item-row',
+      onEnd: function(evt) {
+        // after drag & drop, sync both panes data model from DOM
+        syncModelFromDOM();
+        saveLocal();
+        pushHistory(); // record state after drag
+        updateStatsUI(0); updateStatsUI(1);
+      },
+      ghostClass: 'sortable-drag'
     });
-  });
-  initWS(); dSave();
-}
-
-function addBulk(i){
-  const b = prompt("Paste items (one per line):");
-  if(b){ hist(); S.lists[i].items.push(...b.split('\n').filter(x=>x.trim())); renderPane(i); dSave(); }
-}
-
-/* ══ JOIN ══ */
-let _jIdx=0;
-function joinItems(i){ _jIdx=i; refreshJoin(); showModal('joinModal'); }
-function refreshJoin(){
-  const trim = document.getElementById('joinTrim').checked;
-  let items = S.lists[_jIdx].items.filter(x=>x.trim());
-  if(trim) items = items.map(x=>x.trim());
-  const ch = document.getElementById('joinChar').value;
-  const mode = document.getElementById('joinMode').value;
-  let res = "";
-  if(mode==='prefix') res = items.map(x=>ch+x).join('\n');
-  else if(mode==='suffix') res = items.map(x=>x+ch).join('\n');
-  else if(mode==='sep') res = items.join(ch);
-  else if(mode==='wrap') res = items.map(x=>ch+x+ch).join('\n');
-  document.getElementById('joinResult').value = res;
-}
-
-/* ══ UI CORE ══ */
-function initWS(){
-  const ws = document.getElementById('ws'); ws.innerHTML='';
-  S.lists.forEach((_,i)=>{
-    const p = document.createElement('div'); p.id=`pf${i}`; p.className='pane';
-    p.style.width=S.pw+'px'; p.onclick=()=>setActive(i);
-    ws.appendChild(p); buildHeader(i); renderPane(i);
-  });
-}
-function setActive(i){ aP=i; document.querySelectorAll('.pane').forEach((p,j)=>p.classList.toggle('active-pane',j===i)); }
-function updateBadge(i){ 
-  const b = document.querySelector(`#pf${i} .sb`); 
-  if(b) b.textContent = S.lists[i].items.length.toLocaleString(); 
-}
-function setFS(v){ S.fs=v; document.getElementById('fsV').textContent=v; document.documentElement.style.setProperty('--fs',v+'px'); }
-function setPW(v){ S.pw=v; document.getElementById('pwV').textContent=v; document.querySelectorAll('.pane').forEach(p=>p.style.width=v+'px'); }
-function showModal(id){ document.getElementById('mo').style.display='block'; document.getElementById(id).style.display='block'; }
-function closeModal(){ document.querySelectorAll('.modal,#mo').forEach(e=>e.style.display='none'); }
-function copyJoin(){ navigator.clipboard.writeText(document.getElementById('joinResult').value); alert('Copied!'); }
-const dRefresh=()=>{ S.lists.forEach((_,i)=>renderPane(i)); };
-function exportD(){
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(S)]));
-  a.download='lists_v19.json'; a.click();
-}
-function importD(e){
-  const r=new FileReader(); r.onload=ev=>{ S=JSON.parse(ev.target.result); initWS(); };
-  r.readAsText(e.target.files[0]);
-}
-function moveWC(i,dir){
-  hist(); const m=[],sg=[];
-  S.lists[i].items.forEach(x=>(x.includes(' ')?m:sg).push(x));
-  S.lists[i].items=dir==='top'?[...m,...sg]:[...sg,...m];
-  renderPane(i);
-}
-
-initWS();
+    const sortableRight = new Sortable(rightEl, {
+      group: groupConfig,
+      animation: 200,
+      handle: '.item-row',
+      draggable: '.item-row',
+      onEnd: function(evt) {
+        syncModelFromDOM();
+        saveLocal();
+        pushHistory();
+        updateStatsUI(0); updateStatsUI(1);
+      },
+      ghostClass: 'sortable-drag'
+    });
+    sortableInstances = [sortableLeft, sortableRight];
+  }
+  
+  // sync model from current DOM order (after drag-drop or button actions)
+  function syncModelFromDOM() {
+    const leftItems = [];
+    const rightItems = [];
+    const leftRows = document.querySelectorAll('#sortable-left .item-row');
+    const rightRows = document.querySelectorAll('#sortable-right .item-row');
+    leftRows.forEach(row => {
+      const textDiv = row.querySelector('.item-text');
+      if(textDiv) leftItems.push(textDiv.innerText);
+    });
+    rightRows.forEach(row => {
+      const textDiv = row.querySelector('.item-text');
+      if(textDiv) rightItems.push(textDiv.innerText);
+    });
+    S.lists[0].items = leftItems;
+    S.lists[1].items = rightItems;
+    // keep names unchanged
+    saveLocal();
+    updateStatsUI(0); updateStatsUI(1);
+  }
+  
+  // Full UI rebuild: headers + sortable containers
+  function fullRebuildUI() {
+    if(!leftPaneDiv || !rightPaneDiv) return;
+    // Rebuild headers and containers
+    leftPaneDiv.innerHTML = '';
+    rightPaneDiv.innerHTML = '';
+    
+    // Left pane header
+    const leftHeader = buildPaneHeader(0);
+    const leftListDiv = document.createElement('div');
+    leftListDiv.id = 'sortable-left';
+    leftListDiv.className = 'sortable-list';
+    leftPaneDiv.append(leftHeader, leftListDiv);
+    
+    // Right pane header
+    const rightHeader = buildPaneHeader(1);
+    const rightListDiv = document.createElement('div');
+    rightListDiv.id = 'sortable-right';
+    rightListDiv.className = 'sortable-list';
+    rightPaneDiv.append(rightHeader, rightListDiv);
+    
+    renderListFromModel(0, leftListDiv);
+    renderListFromModel(1, rightListDiv);
+    initSortable(); // reattach Sortable after rebuild
+  }
+  
+  function buildPaneHeader(paneIdx) {
+    const pane = S.lists[paneIdx];
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'pane-header';
+    headerDiv.innerHTML = `
+      <div class="pane-title-row">
+        <input class="pane-name" value="${escapeHtml(pane.name)}" data-paneidx="${paneIdx}" />
+        <div class="stats-badge" id="stats-${paneIdx}"></div>
+        <button class="clear-pane-btn" data-paneidx="${paneIdx}" style="background:transparent; color:#aa2e2e; font-size:14px; padding:2px 8px;">🗑️ Clear</button>
+      </div>
+      <div class="action-grid">
+        <button class="bulk-add" data-paneidx="${paneIdx}">📦 Bulk</button>
+        <button class="add-line" data-paneidx="${paneIdx}">➕ Item</button>
+        <button class="dedupe-btn" data-paneidx="${paneIdx}">✨ Uniq</button>
+        <select class="menu-action" data-paneidx="${paneIdx}">
+          <option value="">⚙️ Text...</option>
+          <option value="suffix">➕ Suffix</option>
+          <option value="trim">✂️ Trim</option>
+          <option value="alpha">🔠 A-Z only</option>
+          <option value="modal">📋 Export</option>
+        </select>
+      </div>
+    `;
+    const nameInput = headerDiv.querySelector('.pane-name');
+    nameInput.addEventListener('change', (e) => {
+      pushHistory();
+      S.lists[paneIdx].name = e.target.value;
+      saveLocal();
+    });
+    headerDiv.querySelector('.clear-pane-btn').addEventListener('click', () => clearPane(paneIdx));
+    headerDiv.querySelector('.bulk-add').addEventListener('click', () => bulkAdd(paneIdx));
+    headerDiv.querySelector('.add-line').addEventListener('click', () => addEmptyLine(paneIdx));
+    headerDiv.querySelector('.dedupe-btn').addEventListener('click', () => dedupePane(paneIdx));
+    const selectAction = headerDiv.querySelector('.menu-action');
+    selectAction.addEventListener('change', (e) => {
+      const val = e.target.value;
+      if(val) handleTextAction(paneIdx, val);
+      selectAction.value = '';
+    });
+    updateStatsUI(paneIdx);
+    return headerDiv;
+  }
+  
+  function clearPane(paneIdx) {
+    if(confirm(`Clear all items in "${S.lists[paneIdx].name}"?`)) {
+      pushHistory();
+      S.lists[paneIdx].items = [];
+      saveLocal();
+      fullRebuildUI();
+    }
+  }
+  function bulkAdd(paneIdx) {
+    const raw = prompt("Paste lines (each new line = new item):");
+    if(raw) {
+      pushHistory();
+      const newItems = raw.split(/\r?\n/).filter(l => l.trim() !== "");
+      S.lists[paneIdx].items.push(...newItems);
+      saveLocal();
+      fullRebuildUI();
+    }
+  }
+  function addEmptyLine(paneIdx) {
+    pushHistory();
+    S.lists[paneIdx].items.push("new item");
+    saveLocal();
+    fullRebuildUI();
+  }
+  function dedupePane(paneIdx) {
+    pushHistory();
+    const original = S.lists[paneIdx].items;
+    const unique = [...new Set(original)];
+    const dupes = original.filter((it,idx) => original.indexOf(it) !== idx);
+    S.lists[paneIdx].items = unique;
+    if(dupes.length) {
+      const other = paneIdx === 0 ? 1 : 0;
+      S.lists[other].items.push(...dupes);
+    }
+    saveLocal();
+    fullRebuildUI();
+  }
+  function handleTextAction(paneIdx, action) {
+    pushHistory();
+    const items = S.lists[paneIdx].items;
+    if(action === 'suffix') {
+      const suf = prompt("Suffix to add:");
+      if(suf) S.lists[paneIdx].items = items.map(i => i + suf);
+    } else if(action === 'trim') {
+      S.lists[paneIdx].items = items.map(i => i.trim());
+    } else if(action === 'alpha') {
+      S.lists[paneIdx].items = items.map(i => i.replace(/[^a-zA-Z]/g, ''));
+    } else if(action === 'modal') {
+      document.getElementById('joinResult').value = items.join('\n');
+      showModal('joinModal');
+      return;
+    }
+    saveLocal();
+    fullRebuildUI();
+  }
+  
+  function addNewPane() {
+    if(S.lists.length >= 2) {
+      alert("Only 2 panes supported for split view. Use 'Clear' to reset items.");
+      return;
+    }
+    pushHistory();
+    S.lists.push({ id: Date.now(), name: `Pane ${S.lists.length+1}`, items: ["New item"] });
+    while(S.lists.length > 2) S.lists.pop();
+    saveLocal();
+    fullRebuildUI();
+  }
+  
+  // ---------- SPLITTER: HOLD & DRAG (IMMEDIATE, no long press) ----------
+  function initSplitterDrag() {
+    if(!splitHandle) return;
+    let isResizing = false;
+    let startClientX = 0;
+    let startSplit = S.split;
+    const onMove = (e) => {
+      if(!isResizing) return;
+      e.preventDefault();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const rect = workspaceRoot.getBoundingClientRect();
+      let percent = ((clientX - rect.left) / rect.width) * 100;
+      percent = Math.min(82, Math.max(18, percent));
+      if(percent !== S.split) {
+        S.split = percent;
+        document.documentElement.style.setProperty('--split', S.split + '%');
+        document.getElementById('spV').innerText = Math.round(S.split);
+        const range = document.querySelector('.sbox input[type="range"]');
+        if(range) range.value = S.split;
+        saveLocal();
+      }
+    };
+    const stopResize = () => {
+      if(isResizing) {
+        isResizing = false;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', stopResize);
+        window.removeEventListener('touchmove', onMove);
+        window.removeEventListener('touchend', stopResize);
+        document.body.style.touchAction = '';
+      }
+    };
+    const startDrag = (e) => {
+      e.preventDefault();
+      isResizing = true;
+      startSplit = S.split;
+      startClientX = e.touches ? e.touches[0].clientX : e.clientX;
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', stopResize);
+      window.addEventListener('touchmove', onMove, { passive: false });
+      window.addEventListener('touchend', stopResize);
+      document.body.style.touchAction = 'none';
+    };
+    splitHandle.addEventListener('mousedown', startDrag);
+    splitHandle.addEventListener('touchstart', startDrag, { passive: false });
+  }
+  
+  // Layout cycling
+  const presets = [50, 35, 65, 42, 58, 30, 70];
+  let presetIdx = 0;
+  function cycleLayoutPreset() {
+    const curr = S.split;
+    let next = presets[(presets.findIndex(p => Math.abs(p-curr)<1) + 1) % presets.length];
+    if(next === undefined) next = 50;
+    S.split = next;
+    document.documentElement.style.setProperty('--split', S.split + '%');
+    document.getElementById('spV').innerText = Math.round(S.split);
+    const slider = document.querySelector('.sbox input[type="range"]');
+    if(slider) slider.value = S.split;
+    saveLocal();
+    if(navigator.vibrate) navigator.vibrate(15);
+  }
+  function setSplitFromSlider(val) {
+    S.split = parseFloat(val);
+    document.documentElement.style.setProperty('--split', S.split + '%');
+    document.getElementById('spV').innerText = Math.round(S.split);
+    saveLocal();
+  }
+  function setGlobalFont(val) {
+    S.fs = parseInt(val);
+    document.documentElement.style.setProperty('--fs', S.fs + 'px');
+    document.getElementById('fsV').innerText = S.fs;
+    saveLocal();
+    fullRebuildUI();
+  }
+  function exportBackup() {
+    const dataStr = JSON.stringify(S, null, 2);
+    const blob = new Blob([dataStr], {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'smart_lists_backup.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function escapeHtml(str) { return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]); }
+  function showModal(id) { document.getElementById('mo').style.display='block'; document.getElementById(id).style.display='block'; }
+  function closeModal() { document.querySelectorAll('.modal, #mo').forEach(el=>el.style.display='none'); }
+  
+  // Build workspace DOM
+  function buildWorkspace() {
+    workspaceRoot = document.getElementById('workspaceRoot');
+    workspaceRoot.innerHTML = '';
+    leftPaneDiv = document.createElement('div');
+    leftPaneDiv.className = 'pane-left';
+    rightPaneDiv = document.createElement('div');
+    rightPaneDiv.className = 'pane-right';
+    splitHandle = document.createElement('div');
+    splitHandle.className = 'split-handle';
+    workspaceRoot.append(leftPaneDiv, splitHandle, rightPaneDiv);
+    initSplitterDrag();
+    fullRebuildUI();
+  }
+  
+  function init() {
+    buildWorkspace();
+    document.documentElement.style.setProperty('--split', S.split + '%');
+    document.documentElement.style.setProperty('--fs', S.fs + 'px');
+    document.getElementById('fsV').innerText = S.fs;
+    document.getElementById('spV').innerText = Math.round(S.split);
+    const rangeInput = document.querySelector('.sbox input[type="range"]');
+    if(rangeInput) rangeInput.value = S.split;
+    saveLocal();
+  }
+  
+  window.undo = undo; window.redo = redo; window.addNewPane = addNewPane;
+  window.cycleLayoutPreset = cycleLayoutPreset; window.setGlobalFont = setGlobalFont;
+  window.setSplitFromSlider = setSplitFromSlider; window.exportBackup = exportBackup;
+  window.closeModal = closeModal;
+  init();
 </script>
 </body>
 </html>
