@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Smart Lists - Drag Splitter + Item Drag & Drop</title>
-  <!-- SortableJS for smooth drag/drop reorder & cross-pane movement -->
+  <title>Pro List Manager - Collapsible Toolbar + Smart Splitter</title>
+  <!-- SortableJS for drag & drop reorder -->
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
   <style>
     * {
@@ -18,9 +18,12 @@
       --bdr: #ababab;
       --red: #d32f2f;
       --fs: 14px;
-      --rh: 44px;
+      --rh: 48px;
       --split: 50%;
-      --handle-width: 10px;
+      --handle-width: 12px;
+      --pane-min-width: 260px;
+      --grid-gap: 12px;
+      --toolbar-height: 64px;
     }
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -31,31 +34,63 @@
       flex-direction: column;
       height: 100vh;
       overflow: hidden;
-      touch-action: pan-y;
     }
-    /* Toolbar */
+    /* Toolbar wrapper with toggle arrow */
+    .toolbar-section {
+      position: relative;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+    }
     .toolbar {
       background: var(--card);
       padding: 8px 12px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       display: flex;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
       flex-wrap: wrap;
       justify-content: center;
-      z-index: 100;
-      backdrop-filter: blur(2px);
+      backdrop-filter: blur(4px);
+      transition: transform 0.25s ease, opacity 0.2s;
+      transform: translateY(0);
+      opacity: 1;
     }
-    button, .layout-btn {
+    .toolbar.collapsed {
+      transform: translateY(-100%);
+      opacity: 0;
+      pointer-events: none;
+      position: absolute;
+      width: 100%;
+    }
+    .toggle-arrow {
+      background: var(--acc);
+      color: white;
+      border: none;
+      border-radius: 0 0 30px 30px;
+      padding: 6px 16px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      align-self: center;
+      margin-top: 0;
+      transition: 0.1s;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      z-index: 210;
+      width: fit-content;
+    }
+    .toggle-arrow:active { transform: scale(0.96); }
+    button, .tool-btn {
       background: white;
       border: none;
-      padding: 6px 14px;
+      padding: 6px 12px;
       border-radius: 40px;
       font-weight: 600;
       cursor: pointer;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
       transition: 0.1s;
-      font-size: 13px;
+      font-size: 12px;
+      position: relative;
     }
     button:active { transform: scale(0.96); background: #e9e9e9; }
     .btn-group {
@@ -76,40 +111,41 @@
       align-items: center;
       gap: 3px;
     }
-    /* Workspace flex + splitter */
+    input.search-input {
+      padding: 5px 10px;
+      border-radius: 30px;
+      border: 1px solid #ccc;
+      width: 140px;
+      font-size: 12px;
+    }
+    /* Workspace */
     .workspace {
-      display: flex;
       flex: 1;
       min-height: 0;
       width: 100%;
-      padding: 8px;
+      padding: 10px;
       box-sizing: border-box;
+      overflow: auto;
+    }
+    /* SPLIT MODE */
+    .split-container {
+      display: flex;
+      height: 100%;
       gap: 0;
       overflow: hidden;
+      position: relative;
     }
-    .pane-left {
-      width: var(--split);
-      min-width: 90px;
-      background: var(--card);
-      border-radius: 20px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      box-shadow: 0 6px 14px rgba(0,0,0,0.1);
-      border: 1px solid #ddd;
-    }
-    .pane-right {
+    .split-pane {
       flex: 1;
-      min-width: 90px;
+      min-width: 80px;
       background: var(--card);
       border-radius: 20px;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      box-shadow: 0 6px 14px rgba(0,0,0,0.1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       border: 1px solid #ddd;
     }
-    /* Split Handle - immediate drag (no long press) */
     .split-handle {
       width: var(--handle-width);
       background: #b0aea5;
@@ -120,11 +156,9 @@
       flex-shrink: 0;
       transition: background 0.1s;
       position: relative;
+      z-index: 20;
     }
-    .split-handle:active {
-      background: var(--acc);
-      box-shadow: 0 0 0 2px rgba(0,120,215,0.3);
-    }
+    .split-handle:active { background: var(--acc); }
     .split-handle::after {
       content: "⋮⋮";
       position: absolute;
@@ -136,9 +170,26 @@
       letter-spacing: -2px;
       pointer-events: none;
     }
-    /* Pane header */
+    /* GRID MODE */
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(var(--pane-min-width), 1fr));
+      gap: var(--grid-gap);
+      height: 100%;
+      align-items: start;
+    }
+    .grid-pane {
+      background: var(--card);
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      border: 1px solid #ddd;
+    }
+    /* Pane Header */
     .pane-header {
-      padding: 10px 12px;
+      padding: 8px 12px;
       border-bottom: 2px solid #e2dfd7;
       background: #fffbf4;
     }
@@ -146,14 +197,15 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
+      gap: 6px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
     }
     .pane-name {
       font-weight: bold;
       border: none;
       background: transparent;
-      font-size: 16px;
+      font-size: 14px;
       width: 110px;
       padding: 4px 0;
       border-bottom: 1px dashed #aaa;
@@ -165,90 +217,119 @@
       padding: 4px 10px;
       border-radius: 40px;
       display: flex;
-      gap: 10px;
+      gap: 8px;
       font-weight: 500;
     }
-    .action-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
-      margin-top: 8px;
+    .pane-actions {
+      display: flex;
+      gap: 5px;
+      align-items: center;
     }
-    .action-grid button, .action-grid select {
-      font-size: 10px;
-      padding: 6px 0;
-      font-weight: bold;
+    .action-dropdowns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .action-dropdowns select, .action-dropdowns button {
+      font-size: 9px;
+      padding: 5px 6px;
       background: white;
       border: 1px solid #ccc;
       border-radius: 30px;
       cursor: pointer;
     }
-    /* List container (Sortable) */
+    /* List container */
     .sortable-list {
       flex: 1;
       overflow-y: auto;
       padding: 6px 4px;
-      min-height: 100px;
       background: #fffef8;
       margin: 6px;
       border-radius: 16px;
+      min-height: 100px;
     }
-    /* Item row styling */
+    /* Item row with hover buttons */
     .item-row {
       display: flex;
       align-items: center;
       background: white;
       border-radius: 14px;
       margin-bottom: 6px;
-      padding: 0 6px;
+      padding: 4px 6px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
       border: 1px solid #efede5;
-      transition: 0.05s linear;
-      cursor: grab;
-    }
-    .item-row:active {
-      cursor: grabbing;
+      cursor: pointer;
+      position: relative;
     }
     .item-text {
       flex: 1;
-      padding: 10px 8px;
+      padding: 8px 6px;
       font-size: var(--fs);
       font-weight: 500;
       white-space: nowrap;
       overflow-x: auto;
       overflow-y: hidden;
       background: transparent;
-      border: none;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      cursor: grab;
     }
-    .item-text:focus {
-      outline: 2px solid var(--acc);
-      background: #fff9c6;
-      border-radius: 12px;
-      white-space: normal;
-    }
+    .item-text::-webkit-scrollbar { height: 4px; }
+    /* Row buttons - hidden by default, show on hover */
     .row-buttons {
       display: flex;
-      gap: 6px;
+      gap: 4px;
       align-items: center;
+      pointer-events: auto;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .item-row:hover .row-buttons {
+      opacity: 1;
     }
     .row-buttons button {
-      background: transparent;
+      background: rgba(255,255,240,0.9);
       border: none;
-      font-size: 16px;
+      font-size: 13px;
       cursor: pointer;
-      padding: 6px 6px;
-      border-radius: 40px;
-      width: 32px;
-      font-weight: bold;
+      padding: 4px 5px;
+      width: 30px;
+      border-radius: 30px;
       transition: 0.05s;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
-    .row-buttons button:active {
-      background: #ddd;
-      transform: scale(0.92);
-    }
+    .row-buttons button:active { background: #ddd; transform: scale(0.92); }
     .delete-btn { color: #d32f2f; }
     .rename-btn { color: #2c6e9e; }
-    .up-btn, .down-btn { color: #4b6e3b; font-weight: bold; }
+    .move-extreme { color: #6b4e3a; font-weight: bold; }
+    .collapsed .sortable-list { display: none; }
+    /* Tooltip */
+    [data-tip] {
+      position: relative;
+    }
+    [data-tip]:before {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: 120%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e1e1e;
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      white-space: nowrap;
+      z-index: 1000;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      font-weight: normal;
+    }
+    [data-tip]:hover:before {
+      opacity: 1;
+    }
     /* Modal */
     #mo {
       display: none;
@@ -271,170 +352,249 @@
       border-radius: 32px;
       z-index: 1000;
       width: 85%;
-      max-width: 460px;
-      box-shadow: 0 20px 35px rgba(0,0,0,0.3);
+      max-width: 500px;
     }
-    textarea {
-      width: 100%;
-      border-radius: 20px;
-      border: 1px solid #ccc;
-      padding: 12px;
-      font-family: monospace;
+    textarea { width: 100%; border-radius: 16px; padding: 10px; }
+    @media (max-width: 600px) {
+      .row-buttons button { width: 28px; font-size: 12px; }
+      .action-dropdowns select, .action-dropdowns button { font-size: 8px; }
     }
-    @media (max-width: 550px) {
-      .row-buttons button { font-size: 14px; width: 28px; padding: 4px; }
-      .item-text { font-size: 12px; }
-      .action-grid { gap: 3px; }
-    }
-    .sortable-drag {
-      opacity: 0.6;
-      background: #b8d9ff;
-      box-shadow: 0 5px 12px black;
-    }
+    .sortable-drag { opacity: 0.5; background: #b8d9ff; }
+    .pane-drag-placeholder { background: #ccc; border: 2px dashed #666; opacity: 0.6; }
   </style>
 </head>
 <body>
 <div id="mo" onclick="closeModal()"></div>
-<div class="toolbar">
-  <div class="btn-group">
-    <button onclick="undo()">↩️ Undo</button>
-    <button onclick="redo()">↪️ Redo</button>
+
+<div class="toolbar-section">
+  <div class="toolbar" id="toolbar">
+    <div class="btn-group">
+      <button onclick="undo()" data-tip="Undo last action">↩️ Undo</button>
+      <button onclick="redo()" data-tip="Redo undone action">↪️ Redo</button>
+    </div>
+    <button onclick="addPane()" data-tip="Add a new pane (grid mode)">➕ Add Pane</button>
+    <button onclick="toggleLayoutMode()" id="layoutToggleBtn" style="background:#2c5f8a;color:white" data-tip="Switch between Split (2 panes) and Grid (3+ panes)">🔲 Grid Mode</button>
+    <div class="sbox">
+      <label>🔤 Font <span id="fsV">14</span>px</label>
+      <input type="range" min="10" max="22" value="14" oninput="setGlobalFont(this.value)">
+    </div>
+    <div class="sbox" id="sizeControl">
+      <label>📐 Width <span id="pwV">260</span>px</label>
+      <input type="range" min="180" max="500" value="260" oninput="setPaneMinWidth(this.value)">
+    </div>
+    <input type="text" id="globalSearch" placeholder="🔍 Search items..." class="search-input" oninput="filterAllLists()">
+    <button onclick="exportBackup()" data-tip="Export all data to JSON file">💾 Backup</button>
   </div>
-  <button onclick="addNewPane()">➕ Add Pane</button>
-  <button onclick="cycleLayoutPreset()" style="background:#2c5f8a; color:white">🔄 Layouts</button>
-  <div class="sbox">
-    <label>🔤 Font <span id="fsV">14</span>px</label>
-    <input type="range" min="10" max="22" value="14" oninput="setGlobalFont(this.value)">
-  </div>
-  <div class="sbox">
-    <label>📐 Split: <span id="spV">50</span>%</label>
-    <input type="range" min="18" max="82" value="50" oninput="setSplitFromSlider(this.value)">
-  </div>
-  <button onclick="exportBackup()">💾 Backup</button>
+  <button id="toggleToolbarBtn" class="toggle-arrow" data-tip="Toggle toolbar">▲ Hide</button>
 </div>
 
 <div class="workspace" id="workspaceRoot"></div>
 
 <div id="joinModal" class="modal">
-  <h3 style="margin:0 0 12px">📋 Export list content</h3>
+  <h3>📋 Export Result</h3>
   <textarea id="joinResult" rows="10" readonly></textarea>
-  <button onclick="closeModal()" style="width:100%; margin-top:12px; padding:10px">Close</button>
+  <div style="display:flex; gap:10px; margin-top:12px">
+    <button onclick="copyJoinToClipboard()" style="background:var(--acc);color:white">📋 Copy</button>
+    <button onclick="closeModal()">Close</button>
+  </div>
 </div>
 
 <script>
-  // ---------- DATA MODEL (max 2 panes but can be extended but we keep 2) ----------
-  let S = JSON.parse(localStorage.getItem('smart_split_drag')) || {
-    lists: [
-      { id: 1, name: "Left", items: ["Drag me ⇅", "Long tap & drag to reorder", "Drop anywhere"] },
-      { id: 2, name: "Right", items: ["Resize splitter (hold & drag)", "Use ↑↓ ✏️ 🗑️", "Cycle layouts"] }
+  // ---------- DATA MODEL ----------
+  let S = JSON.parse(localStorage.getItem('pro_list_manager_final_v3')) || {
+    layoutMode: 'grid',
+    panes: [
+      { id: 1, name: "Left", items: ["👉 Tap item → moves to other pane", "➡️ Drag text horizontally to see full name", "Buttons appear on hover"], collapsed: false },
+      { id: 2, name: "Right", items: ["Resize splitter (hold & drag)", "Click ▲ to collapse toolbar", "Hover over buttons for tooltips"], collapsed: false }
     ],
     fs: 14,
-    split: 50
+    paneMinWidth: 260,
+    splitPercent: 50,
+    toolbarCollapsed: false
   };
-  // Ensure exactly 2 panes for split UI
-  if (S.lists.length > 2) S.lists = S.lists.slice(0,2);
-  while(S.lists.length < 2) S.lists.push({ id: Date.now(), name: `Pane ${S.lists.length+1}`, items: [] });
+  if (S.layoutMode === 'split' && S.panes.length !== 2) S.layoutMode = 'grid';
   
   let historyStack = [];
   let redoStack = [];
-  let sortableInstances = []; // store Sortable instances
-  let leftContainer, rightContainer, leftSortableDiv, rightSortableDiv;
-  let leftPaneDiv, rightPaneDiv, splitHandle, workspaceRoot;
+  let sortableItems = [];
+  let paneSortable = null;
+  let dragOccurred = false;
+  let horizontalScrollFlag = false;
   
-  function saveLocal() { localStorage.setItem('smart_split_drag', JSON.stringify(S)); }
+  function saveLocal() { localStorage.setItem('pro_list_manager_final_v3', JSON.stringify(S)); }
   function pushHistory() {
     historyStack.push(JSON.stringify(S));
-    if(historyStack.length > 40) historyStack.shift();
+    if(historyStack.length > 50) historyStack.shift();
     redoStack = [];
   }
-  function undo() {
-    if(historyStack.length) {
-      redoStack.push(JSON.stringify(S));
-      S = JSON.parse(historyStack.pop());
-      while(S.lists.length < 2) S.lists.push({ id: Date.now(), name: `Pane`, items: [] });
-      if(S.lists.length > 2) S.lists = S.lists.slice(0,2);
-      fullRebuildUI();
-      saveLocal();
-    }
-  }
-  function redo() {
-    if(redoStack.length) {
-      historyStack.push(JSON.stringify(S));
-      S = JSON.parse(redoStack.pop());
-      while(S.lists.length < 2) S.lists.push({ id: Date.now(), name: `Pane`, items: [] });
-      if(S.lists.length > 2) S.lists = S.lists.slice(0,2);
-      fullRebuildUI();
-      saveLocal();
+  function undo() { if(historyStack.length) { redoStack.push(JSON.stringify(S)); S = JSON.parse(historyStack.pop()); enforceLayoutConsistency(); fullRebuildUI(); saveLocal(); } }
+  function redo() { if(redoStack.length) { historyStack.push(JSON.stringify(S)); S = JSON.parse(redoStack.pop()); enforceLayoutConsistency(); fullRebuildUI(); saveLocal(); } }
+  
+  function enforceLayoutConsistency() {
+    if (S.layoutMode === 'split' && S.panes.length !== 2) S.layoutMode = 'grid';
+    if (S.layoutMode === 'split') {
+      while(S.panes.length < 2) S.panes.push({ id: Date.now()+Math.random(), name: `Pane ${S.panes.length+1}`, items: [], collapsed: false });
+      if(S.panes.length > 2) S.panes = S.panes.slice(0,2);
     }
   }
   
-  // Helper: update stats display
-  function updateStatsUI(paneIdx) {
-    const list = S.lists[paneIdx];
-    const totalChars = list.items.reduce((s,it)=> s + it.length,0);
-    const uniqueCount = new Set(list.items).size;
-    const statsSpan = document.querySelector(`#stats-${paneIdx}`);
-    if(statsSpan) statsSpan.innerHTML = `<span>📋 ${list.items.length}</span><span>🔤 ${totalChars}</span><span>✨ ${uniqueCount}</span>`;
+  function updateStats(paneId) {
+    const pane = S.panes.find(p => p.id == paneId);
+    if(!pane) return;
+    const totalChars = pane.items.reduce((s,it)=> s + it.length, 0);
+    const unique = new Set(pane.items).size;
+    const statsSpan = document.querySelector(`#stats-${pane.id}`);
+    if(statsSpan) statsSpan.innerHTML = `<span>📋 ${pane.items.length}</span><span>🔤 ${totalChars}</span><span>✨ ${unique}</span>`;
   }
   
-  // Render items from S into DOM (preserve Sortable)
-  function renderListFromModel(paneIdx, containerElement) {
-    if(!containerElement) return;
-    containerElement.innerHTML = '';
-    const itemsArray = S.lists[paneIdx].items;
-    for(let i=0; i<itemsArray.length; i++) {
-      const itemText = itemsArray[i];
+  // Render items with hover buttons and horizontal scroll detection
+  function renderPaneItems(paneId, containerEl) {
+    if(!containerEl) return;
+    const pane = S.panes.find(p => p.id == paneId);
+    if(!pane) return;
+    const paneIdx = S.panes.findIndex(p => p.id == paneId);
+    containerEl.innerHTML = '';
+    const searchTerm = document.getElementById('globalSearch')?.value.toLowerCase() || '';
+    const filteredItems = searchTerm ? pane.items.filter(it => it.toLowerCase().includes(searchTerm)) : [...pane.items];
+    filteredItems.forEach((item, virtualIdx) => {
+      const originalIdx = pane.items.indexOf(item);
       const row = document.createElement('div');
       row.className = 'item-row';
-      row.setAttribute('data-idx', i);
-      // Editable span (contenteditable? but we use input for better control)
       const textSpan = document.createElement('div');
       textSpan.className = 'item-text';
-      textSpan.contentEditable = 'false';
-      textSpan.innerText = itemText;
-      textSpan.setAttribute('data-original', itemText);
-      // Buttons container
+      textSpan.innerText = item;
+      // Horizontal scroll handling (prevents tap if user scrolls)
+      let startScrollLeft = 0, touchStartX = 0, hasScrolledHoriz = false;
+      textSpan.addEventListener('touchstart', (e) => {
+        startScrollLeft = textSpan.scrollLeft;
+        touchStartX = e.touches[0].clientX;
+        hasScrolledHoriz = false;
+      });
+      textSpan.addEventListener('touchmove', (e) => {
+        const deltaX = Math.abs(e.touches[0].clientX - touchStartX);
+        if (deltaX > 5) {
+          hasScrolledHoriz = true;
+          horizontalScrollFlag = true;
+          e.stopPropagation();
+        }
+      });
+      textSpan.addEventListener('touchend', () => {
+        if (hasScrolledHoriz) setTimeout(() => { horizontalScrollFlag = false; }, 100);
+      });
+      let mouseDownX = 0, mouseStartScroll = 0, mouseMoved = false;
+      textSpan.addEventListener('mousedown', (e) => {
+        mouseDownX = e.clientX;
+        mouseStartScroll = textSpan.scrollLeft;
+        mouseMoved = false;
+      });
+      textSpan.addEventListener('mousemove', (e) => {
+        if (Math.abs(e.clientX - mouseDownX) > 5) {
+          mouseMoved = true;
+          horizontalScrollFlag = true;
+          textSpan.scrollLeft = mouseStartScroll - (e.clientX - mouseDownX);
+          e.preventDefault();
+        }
+      });
+      document.addEventListener('mouseup', () => {
+        if (mouseMoved) setTimeout(() => { horizontalScrollFlag = false; }, 100);
+      });
+      
       const btnGroup = document.createElement('div');
       btnGroup.className = 'row-buttons';
-      
-      const upBtn = document.createElement('button');
-      upBtn.innerHTML = '▲';
-      upBtn.title = 'Move up';
-      upBtn.className = 'up-btn';
-      const downBtn = document.createElement('button');
-      downBtn.innerHTML = '▼';
-      downBtn.title = 'Move down';
-      downBtn.className = 'down-btn';
-      const renameBtn = document.createElement('button');
-      renameBtn.innerHTML = '✏️';
-      renameBtn.title = 'Rename';
-      renameBtn.className = 'rename-btn';
-      const delBtn = document.createElement('button');
-      delBtn.innerHTML = '🗑️';
-      delBtn.title = 'Delete';
-      delBtn.className = 'delete-btn';
-      
-      // event handlers
-      upBtn.onclick = (e) => { e.stopPropagation(); moveItemUp(paneIdx, i); };
-      downBtn.onclick = (e) => { e.stopPropagation(); moveItemDown(paneIdx, i); };
-      renameBtn.onclick = (e) => { e.stopPropagation(); activateInlineRename(textSpan, paneIdx, i); };
-      delBtn.onclick = (e) => { e.stopPropagation(); deleteItem(paneIdx, i); };
-      
-      btnGroup.append(upBtn, downBtn, renameBtn, delBtn);
+      const createBtn = (html, tip, clickHandler) => {
+        const btn = document.createElement('button');
+        btn.innerHTML = html;
+        btn.setAttribute('data-tip', tip);
+        btn.onclick = (e) => { e.stopPropagation(); clickHandler(); };
+        return btn;
+      };
+      btnGroup.append(
+        createBtn('⤒', 'Move to top', () => moveItemToTop(paneIdx, originalIdx)),
+        createBtn('⤓', 'Move to bottom', () => moveItemToBottom(paneIdx, originalIdx)),
+        createBtn('◀◀', 'Move to first pane', () => moveItemToPaneExtreme(paneIdx, originalIdx, 'first')),
+        createBtn('▶▶', 'Move to last pane', () => moveItemToPaneExtreme(paneIdx, originalIdx, 'last')),
+        createBtn('▲', 'Move up one', () => moveItemUp(paneIdx, originalIdx)),
+        createBtn('▼', 'Move down one', () => moveItemDown(paneIdx, originalIdx)),
+        createBtn('✏️', 'Rename item', () => inlineRename(textSpan, paneIdx, originalIdx)),
+        createBtn('🗑️', 'Delete item', () => deleteItem(paneIdx, originalIdx))
+      );
       row.append(textSpan, btnGroup);
-      containerElement.appendChild(row);
-    }
-    updateStatsUI(paneIdx);
+      // Single tap to move to next pane (only if not dragging/scrolling)
+      row.addEventListener('click', (e) => {
+        if (dragOccurred || horizontalScrollFlag) return;
+        e.stopPropagation();
+        moveToOtherPane(paneIdx, originalIdx);
+      });
+      containerEl.appendChild(row);
+    });
+    updateStats(paneId);
   }
   
-  // Inline rename
-  function activateInlineRename(spanElem, paneIdx, itemIdx) {
-    const oldVal = S.lists[paneIdx].items[itemIdx];
+  // Movement functions
+  function moveToOtherPane(srcIdx, itemIdx) {
+    if(S.panes.length < 2) return;
+    let destIdx = (srcIdx + 1) % S.panes.length;
+    pushHistory();
+    const moved = S.panes[srcIdx].items.splice(itemIdx, 1)[0];
+    S.panes[destIdx].items.push(moved);
+    saveLocal();
+    fullRebuildUI();
+  }
+  function moveItemToTop(paneIdx, idx) {
+    if(idx === 0) return;
+    pushHistory();
+    const arr = S.panes[paneIdx].items;
+    const item = arr.splice(idx, 1)[0];
+    arr.unshift(item);
+    saveLocal();
+    fullRebuildUI();
+  }
+  function moveItemToBottom(paneIdx, idx) {
+    const arr = S.panes[paneIdx].items;
+    if(idx === arr.length-1) return;
+    pushHistory();
+    const item = arr.splice(idx, 1)[0];
+    arr.push(item);
+    saveLocal();
+    fullRebuildUI();
+  }
+  function moveItemToPaneExtreme(srcIdx, itemIdx, direction) {
+    if(S.panes.length < 2) return;
+    pushHistory();
+    const item = S.panes[srcIdx].items.splice(itemIdx, 1)[0];
+    const targetIdx = direction === 'first' ? 0 : S.panes.length-1;
+    S.panes[targetIdx].items.push(item);
+    saveLocal();
+    fullRebuildUI();
+  }
+  function moveItemUp(paneIdx, idx) {
+    if(idx === 0) return;
+    pushHistory();
+    const arr = S.panes[paneIdx].items;
+    [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]];
+    saveLocal();
+    fullRebuildUI();
+  }
+  function moveItemDown(paneIdx, idx) {
+    if(idx === S.panes[paneIdx].items.length-1) return;
+    pushHistory();
+    const arr = S.panes[paneIdx].items;
+    [arr[idx+1], arr[idx]] = [arr[idx], arr[idx+1]];
+    saveLocal();
+    fullRebuildUI();
+  }
+  function deleteItem(paneIdx, idx) {
+    pushHistory();
+    S.panes[paneIdx].items.splice(idx,1);
+    saveLocal();
+    fullRebuildUI();
+  }
+  function inlineRename(spanElem, paneIdx, itemIdx) {
+    const oldVal = S.panes[paneIdx].items[itemIdx];
     const input = document.createElement('input');
     input.value = oldVal;
-    input.style.width = '80%';
-    input.style.padding = '6px';
-    input.style.fontSize = 'var(--fs)';
+    input.style.width = '70%';
+    input.style.padding = '4px';
     input.style.borderRadius = '20px';
     input.style.border = '2px solid var(--acc)';
     spanElem.style.display = 'none';
@@ -444,7 +604,7 @@
       const newVal = input.value.trim() === "" ? oldVal : input.value;
       if(newVal !== oldVal) {
         pushHistory();
-        S.lists[paneIdx].items[itemIdx] = newVal;
+        S.panes[paneIdx].items[itemIdx] = newVal;
         saveLocal();
         fullRebuildUI();
       } else {
@@ -453,353 +613,342 @@
       }
     };
     input.onblur = finish;
-    input.onkeydown = (e) => { if(e.key === 'Enter') { finish(); } };
+    input.onkeydown = (e) => { if(e.key === 'Enter') finish(); };
   }
   
-  function moveItemUp(paneIdx, idx) {
-    if(idx === 0) return;
-    pushHistory();
-    const arr = S.lists[paneIdx].items;
-    [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]];
-    saveLocal();
-    fullRebuildUI();
-  }
-  function moveItemDown(paneIdx, idx) {
-    if(idx === S.lists[paneIdx].items.length-1) return;
-    pushHistory();
-    const arr = S.lists[paneIdx].items;
-    [arr[idx+1], arr[idx]] = [arr[idx], arr[idx+1]];
-    saveLocal();
-    fullRebuildUI();
-  }
-  function deleteItem(paneIdx, idx) {
-    pushHistory();
-    const removed = S.lists[paneIdx].items.splice(idx,1)[0];
-    // optional: send to opposite pane? but user may expect just removal, but we can keep removal only.
-    // but to be safe, we just delete.
-    saveLocal();
-    fullRebuildUI();
-  }
-  
-  // Handle cross-pane drag & reorder using Sortable events
-  function initSortable() {
-    if(sortableInstances.length) sortableInstances.forEach(s => s.destroy());
-    const leftEl = document.getElementById('sortable-left');
-    const rightEl = document.getElementById('sortable-right');
-    if(!leftEl || !rightEl) return;
-    
-    const groupConfig = {
-      name: 'shared',
-      pull: true,
-      revertClone: false,
-      put: true
-    };
-    const sortableLeft = new Sortable(leftEl, {
-      group: groupConfig,
-      animation: 200,
+  function initItemSortable(containerEl, paneId) {
+    if(!containerEl) return;
+    const sortable = new Sortable(containerEl, {
+      animation: 150,
       handle: '.item-row',
       draggable: '.item-row',
-      onEnd: function(evt) {
-        // after drag & drop, sync both panes data model from DOM
-        syncModelFromDOM();
-        saveLocal();
-        pushHistory(); // record state after drag
-        updateStatsUI(0); updateStatsUI(1);
+      onStart: () => { dragOccurred = true; },
+      onEnd: (evt) => {
+        const items = Array.from(containerEl.querySelectorAll('.item-text')).map(t => t.innerText);
+        const paneIdx = S.panes.findIndex(p => p.id == paneId);
+        if(paneIdx !== -1 && JSON.stringify(S.panes[paneIdx].items) !== JSON.stringify(items)) {
+          pushHistory();
+          S.panes[paneIdx].items = items;
+          saveLocal();
+          updateStats(paneId);
+        }
+        setTimeout(() => { dragOccurred = false; }, 100);
       },
       ghostClass: 'sortable-drag'
     });
-    const sortableRight = new Sortable(rightEl, {
-      group: groupConfig,
-      animation: 200,
-      handle: '.item-row',
-      draggable: '.item-row',
-      onEnd: function(evt) {
-        syncModelFromDOM();
-        saveLocal();
-        pushHistory();
-        updateStatsUI(0); updateStatsUI(1);
-      },
-      ghostClass: 'sortable-drag'
-    });
-    sortableInstances = [sortableLeft, sortableRight];
+    sortableItems.push(sortable);
   }
   
-  // sync model from current DOM order (after drag-drop or button actions)
-  function syncModelFromDOM() {
-    const leftItems = [];
-    const rightItems = [];
-    const leftRows = document.querySelectorAll('#sortable-left .item-row');
-    const rightRows = document.querySelectorAll('#sortable-right .item-row');
-    leftRows.forEach(row => {
-      const textDiv = row.querySelector('.item-text');
-      if(textDiv) leftItems.push(textDiv.innerText);
-    });
-    rightRows.forEach(row => {
-      const textDiv = row.querySelector('.item-text');
-      if(textDiv) rightItems.push(textDiv.innerText);
-    });
-    S.lists[0].items = leftItems;
-    S.lists[1].items = rightItems;
-    // keep names unchanged
+  // Advanced menus (Join, Sort, Match)
+  function handleJoinMenu(paneIdx, action) {
+    if(!action) return;
+    pushHistory();
+    let pane = S.panes[paneIdx];
+    let items = pane.items;
+    if(action === 'horiz') { let sep = prompt("Separator:", ", "); if(sep !== null) pane.items = [items.join(sep)]; }
+    else if(action === 'vert') { pane.items = items.join('\n').split('\n').filter(x => x.trim() !== ""); }
+    else if(action === 'suffix') { let suf = prompt("Suffix:"); if(suf) pane.items = items.map(i => i + suf); }
+    else if(action === 'prefix') { let pre = prompt("Prefix:"); if(pre) pane.items = items.map(i => pre + i); }
+    else if(action === 'trail') { pane.items = items.map(i => i.replace(/\s+$/, '')); }
+    else if(action === 'alpha') { pane.items = items.map(i => i.replace(/[^a-zA-Z]/g, '')); }
+    else if(action === 'modal') { document.getElementById('joinResult').value = items.join('\n'); showModal('joinModal'); return; }
     saveLocal();
-    updateStatsUI(0); updateStatsUI(1);
+    fullRebuildUI();
+  }
+  function handleSort(paneIdx, sortType) {
+    pushHistory();
+    let arr = S.panes[paneIdx].items;
+    if(sortType === 'az') arr.sort((a,b)=>a.localeCompare(b));
+    if(sortType === 'za') arr.sort((a,b)=>b.localeCompare(a));
+    if(sortType === 'short') arr.sort((a,b)=>a.length - b.length);
+    if(sortType === 'long') arr.sort((a,b)=>b.length - a.length);
+    if(sortType === 'rand') arr.sort(()=>Math.random()-0.5);
+    saveLocal();
+    fullRebuildUI();
+  }
+  function handleMatchMenu(srcIdx, action) {
+    if(S.panes.length < 2) { alert("Need at least 2 panes"); return; }
+    const targetIdx = prompt(`Target pane number (1-${S.panes.length})`, srcIdx === 0 ? 2 : 1);
+    if(!targetIdx) return;
+    const tIdx = parseInt(targetIdx)-1;
+    if(!S.panes[tIdx]) return;
+    pushHistory();
+    const srcSet = new Set(S.panes[srcIdx].items.map(x => x.trim()));
+    let removed = [];
+    if(action === 'replace') {
+      removed = S.panes[tIdx].items.filter(x => srcSet.has(x.trim()));
+      S.panes[tIdx].items = S.panes[tIdx].items.filter(x => !srcSet.has(x.trim()));
+      if(removed.length) S.panes.push({ id: Date.now(), name: "Removed", items: removed, collapsed: false });
+    } else if(action === 'extract') {
+      removed = S.panes[tIdx].items.filter(x => !srcSet.has(x.trim()));
+      S.panes[tIdx].items = S.panes[tIdx].items.filter(x => srcSet.has(x.trim()));
+      if(removed.length) S.panes.push({ id: Date.now(), name: "Extracted", items: removed, collapsed: false });
+    } else if(action === 'filter') {
+      const targetSet = new Set(S.panes[tIdx].items.map(x => x.trim()));
+      removed = S.panes[srcIdx].items.filter(x => targetSet.has(x.trim()));
+      S.panes[srcIdx].items = S.panes[srcIdx].items.filter(x => !targetSet.has(x.trim()));
+      if(removed.length) S.panes.push({ id: Date.now(), name: "Filtered", items: removed, collapsed: false });
+    }
+    saveLocal();
+    fullRebuildUI();
   }
   
-  // Full UI rebuild: headers + sortable containers
-  function fullRebuildUI() {
-    if(!leftPaneDiv || !rightPaneDiv) return;
-    // Rebuild headers and containers
-    leftPaneDiv.innerHTML = '';
-    rightPaneDiv.innerHTML = '';
-    
-    // Left pane header
-    const leftHeader = buildPaneHeader(0);
-    const leftListDiv = document.createElement('div');
-    leftListDiv.id = 'sortable-left';
-    leftListDiv.className = 'sortable-list';
-    leftPaneDiv.append(leftHeader, leftListDiv);
-    
-    // Right pane header
-    const rightHeader = buildPaneHeader(1);
-    const rightListDiv = document.createElement('div');
-    rightListDiv.id = 'sortable-right';
-    rightListDiv.className = 'sortable-list';
-    rightPaneDiv.append(rightHeader, rightListDiv);
-    
-    renderListFromModel(0, leftListDiv);
-    renderListFromModel(1, rightListDiv);
-    initSortable(); // reattach Sortable after rebuild
+  function toggleCollapse(paneId) {
+    const pane = S.panes.find(p => p.id == paneId);
+    if(pane) { pane.collapsed = !pane.collapsed; saveLocal(); fullRebuildUI(); }
   }
-  
-  function buildPaneHeader(paneIdx) {
-    const pane = S.lists[paneIdx];
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'pane-header';
-    headerDiv.innerHTML = `
-      <div class="pane-title-row">
-        <input class="pane-name" value="${escapeHtml(pane.name)}" data-paneidx="${paneIdx}" />
-        <div class="stats-badge" id="stats-${paneIdx}"></div>
-        <button class="clear-pane-btn" data-paneidx="${paneIdx}" style="background:transparent; color:#aa2e2e; font-size:14px; padding:2px 8px;">🗑️ Clear</button>
-      </div>
-      <div class="action-grid">
-        <button class="bulk-add" data-paneidx="${paneIdx}">📦 Bulk</button>
-        <button class="add-line" data-paneidx="${paneIdx}">➕ Item</button>
-        <button class="dedupe-btn" data-paneidx="${paneIdx}">✨ Uniq</button>
-        <select class="menu-action" data-paneidx="${paneIdx}">
-          <option value="">⚙️ Text...</option>
-          <option value="suffix">➕ Suffix</option>
-          <option value="trim">✂️ Trim</option>
-          <option value="alpha">🔠 A-Z only</option>
-          <option value="modal">📋 Export</option>
-        </select>
-      </div>
-    `;
-    const nameInput = headerDiv.querySelector('.pane-name');
-    nameInput.addEventListener('change', (e) => {
+  function addPane() {
+    pushHistory();
+    const newId = Date.now();
+    S.panes.push({ id: newId, name: `Pane ${S.panes.length+1}`, items: ["New item"], collapsed: false });
+    if (S.layoutMode === 'split' && S.panes.length > 2) { S.layoutMode = 'grid'; alert("More than 2 panes: switched to Grid mode."); }
+    saveLocal();
+    fullRebuildUI();
+  }
+  function removePane(paneId) {
+    if(S.panes.length <= 1) { alert("Cannot delete last pane"); return; }
+    pushHistory();
+    S.panes = S.panes.filter(p => p.id !== paneId);
+    if (S.layoutMode === 'split' && S.panes.length !== 2) S.layoutMode = 'grid';
+    saveLocal();
+    fullRebuildUI();
+  }
+  function clearPane(paneId) {
+    if(confirm("Clear all items?")) {
       pushHistory();
-      S.lists[paneIdx].name = e.target.value;
-      saveLocal();
-    });
-    headerDiv.querySelector('.clear-pane-btn').addEventListener('click', () => clearPane(paneIdx));
-    headerDiv.querySelector('.bulk-add').addEventListener('click', () => bulkAdd(paneIdx));
-    headerDiv.querySelector('.add-line').addEventListener('click', () => addEmptyLine(paneIdx));
-    headerDiv.querySelector('.dedupe-btn').addEventListener('click', () => dedupePane(paneIdx));
-    const selectAction = headerDiv.querySelector('.menu-action');
-    selectAction.addEventListener('change', (e) => {
-      const val = e.target.value;
-      if(val) handleTextAction(paneIdx, val);
-      selectAction.value = '';
-    });
-    updateStatsUI(paneIdx);
-    return headerDiv;
-  }
-  
-  function clearPane(paneIdx) {
-    if(confirm(`Clear all items in "${S.lists[paneIdx].name}"?`)) {
-      pushHistory();
-      S.lists[paneIdx].items = [];
+      const pane = S.panes.find(p => p.id == paneId);
+      if(pane) pane.items = [];
       saveLocal();
       fullRebuildUI();
     }
   }
-  function bulkAdd(paneIdx) {
-    const raw = prompt("Paste lines (each new line = new item):");
+  function bulkAdd(paneId) {
+    const raw = prompt("Paste lines (each line = new item):");
     if(raw) {
       pushHistory();
       const newItems = raw.split(/\r?\n/).filter(l => l.trim() !== "");
-      S.lists[paneIdx].items.push(...newItems);
+      const pane = S.panes.find(p => p.id == paneId);
+      if(pane) pane.items.push(...newItems);
       saveLocal();
       fullRebuildUI();
     }
   }
-  function addEmptyLine(paneIdx) {
+  function addEmptyLine(paneId) {
     pushHistory();
-    S.lists[paneIdx].items.push("new item");
+    const pane = S.panes.find(p => p.id == paneId);
+    if(pane) pane.items.push("");
     saveLocal();
     fullRebuildUI();
   }
-  function dedupePane(paneIdx) {
+  function dedupePane(paneId) {
     pushHistory();
-    const original = S.lists[paneIdx].items;
-    const unique = [...new Set(original)];
-    const dupes = original.filter((it,idx) => original.indexOf(it) !== idx);
-    S.lists[paneIdx].items = unique;
-    if(dupes.length) {
-      const other = paneIdx === 0 ? 1 : 0;
-      S.lists[other].items.push(...dupes);
+    const pane = S.panes.find(p => p.id == paneId);
+    if(pane) {
+      const original = [...pane.items];
+      pane.items = [...new Set(pane.items)];
+      const dupes = original.filter((it,idx) => original.indexOf(it) !== idx);
+      if(dupes.length) S.panes.push({ id: Date.now(), name: "Dupes", items: dupes, collapsed: false });
+      saveLocal();
+      fullRebuildUI();
     }
-    saveLocal();
-    fullRebuildUI();
   }
-  function handleTextAction(paneIdx, action) {
-    pushHistory();
-    const items = S.lists[paneIdx].items;
-    if(action === 'suffix') {
-      const suf = prompt("Suffix to add:");
-      if(suf) S.lists[paneIdx].items = items.map(i => i + suf);
-    } else if(action === 'trim') {
-      S.lists[paneIdx].items = items.map(i => i.trim());
-    } else if(action === 'alpha') {
-      S.lists[paneIdx].items = items.map(i => i.replace(/[^a-zA-Z]/g, ''));
-    } else if(action === 'modal') {
-      document.getElementById('joinResult').value = items.join('\n');
-      showModal('joinModal');
-      return;
+  
+  function toggleLayoutMode() {
+    if(S.layoutMode === 'split') {
+      S.layoutMode = 'grid';
+      document.getElementById('layoutToggleBtn').innerHTML = '🔲 Split Mode';
+    } else {
+      if(S.panes.length !== 2) { alert("Split mode requires exactly 2 panes."); return; }
+      S.layoutMode = 'split';
+      document.getElementById('layoutToggleBtn').innerHTML = '📐 Grid Mode';
     }
     saveLocal();
     fullRebuildUI();
   }
   
-  function addNewPane() {
-    if(S.lists.length >= 2) {
-      alert("Only 2 panes supported for split view. Use 'Clear' to reset items.");
-      return;
-    }
-    pushHistory();
-    S.lists.push({ id: Date.now(), name: `Pane ${S.lists.length+1}`, items: ["New item"] });
-    while(S.lists.length > 2) S.lists.pop();
-    saveLocal();
-    fullRebuildUI();
+  function buildPaneElement(pane, idx) {
+    const paneDiv = document.createElement('div');
+    paneDiv.className = (S.layoutMode === 'split') ? 'split-pane' : 'grid-pane';
+    if(pane.collapsed) paneDiv.classList.add('collapsed');
+    paneDiv.setAttribute('data-pane-id', pane.id);
+    const header = document.createElement('div');
+    header.className = 'pane-header';
+    header.innerHTML = `
+      <div class="pane-title-row">
+        <input class="pane-name" value="${escapeHtml(pane.name)}" data-id="${pane.id}" />
+        <div class="stats-badge" id="stats-${pane.id}"></div>
+        <div class="pane-actions">
+          <button class="collapse-btn" data-tip="Collapse/expand pane">${pane.collapsed ? '🔽' : '🔼'}</button>
+          <button class="remove-pane-btn" data-tip="Remove this pane">🗑️</button>
+        </div>
+      </div>
+      <div class="action-dropdowns">
+        <select class="join-menu" data-tip="Join, add prefix/suffix, export"><option value="">📄 Join/Text...</option><option value="horiz">Join Horizontally</option><option value="vert">Split Lines</option><option value="suffix">Add Suffix</option><option value="prefix">Add Prefix</option><option value="trail">Trim Spaces</option><option value="alpha">Keep Alpha</option><option value="modal">Export Modal</option></select>
+        <select class="sort-menu" data-tip="Sort items A-Z, by length, shuffle"><option value="">📊 Sort...</option><option value="az">A-Z</option><option value="za">Z-A</option><option value="short">Shortest</option><option value="long">Longest</option><option value="rand">Shuffle</option></select>
+        <select class="match-menu" data-tip="Match with another pane"><option value="">🎯 Match...</option><option value="replace">Remove matches from Target</option><option value="extract">Keep matches in Target</option><option value="filter">Filter out Target</option></select>
+        <button class="bulk-btn" data-tip="Add multiple lines">📦 Bulk</button>
+        <button class="add-btn" data-tip="Add empty item">➕ Item</button>
+        <button class="dedupe-btn" data-tip="Remove duplicates, move dupes to new pane">✨ Uniq</button>
+        <button class="clear-btn" data-tip="Clear all items">🧹 Clear</button>
+      </div>
+    `;
+    const listContainer = document.createElement('div');
+    listContainer.className = 'sortable-list';
+    listContainer.id = `list-${pane.id}`;
+    paneDiv.append(header, listContainer);
+    header.querySelector('.pane-name').onchange = (e) => { pushHistory(); pane.name = e.target.value; saveLocal(); };
+    header.querySelector('.collapse-btn').onclick = () => toggleCollapse(pane.id);
+    header.querySelector('.remove-pane-btn').onclick = () => removePane(pane.id);
+    header.querySelector('.join-menu').onchange = (e) => { handleJoinMenu(idx, e.target.value); e.target.value = ''; };
+    header.querySelector('.sort-menu').onchange = (e) => { handleSort(idx, e.target.value); e.target.value = ''; };
+    header.querySelector('.match-menu').onchange = (e) => { handleMatchMenu(idx, e.target.value); e.target.value = ''; };
+    header.querySelector('.bulk-btn').onclick = () => bulkAdd(pane.id);
+    header.querySelector('.add-btn').onclick = () => addEmptyLine(pane.id);
+    header.querySelector('.dedupe-btn').onclick = () => dedupePane(pane.id);
+    header.querySelector('.clear-btn').onclick = () => clearPane(pane.id);
+    return { paneDiv, listContainer };
   }
   
-  // ---------- SPLITTER: HOLD & DRAG (IMMEDIATE, no long press) ----------
-  function initSplitterDrag() {
-    if(!splitHandle) return;
+  function fullRebuildUI() {
+    const root = document.getElementById('workspaceRoot');
+    root.innerHTML = '';
+    sortableItems.forEach(s => s.destroy());
+    sortableItems = [];
+    if(paneSortable) paneSortable.destroy();
+    
+    if(S.layoutMode === 'split') {
+      const splitContainer = document.createElement('div');
+      splitContainer.className = 'split-container';
+      const leftResult = buildPaneElement(S.panes[0], 0);
+      const rightResult = buildPaneElement(S.panes[1], 1);
+      const handle = document.createElement('div');
+      handle.className = 'split-handle';
+      handle.setAttribute('data-tip', 'Drag to resize panes');
+      splitContainer.append(leftResult.paneDiv, handle, rightResult.paneDiv);
+      root.appendChild(splitContainer);
+      renderPaneItems(S.panes[0].id, leftResult.listContainer);
+      renderPaneItems(S.panes[1].id, rightResult.listContainer);
+      initItemSortable(leftResult.listContainer, S.panes[0].id);
+      initItemSortable(rightResult.listContainer, S.panes[1].id);
+      initSplitterDrag(handle, splitContainer);
+    } else {
+      const gridContainer = document.createElement('div');
+      gridContainer.className = 'grid-container';
+      gridContainer.style.gridTemplateColumns = `repeat(auto-fill, minmax(${S.paneMinWidth}px, 1fr))`;
+      S.panes.forEach((pane, idx) => {
+        const { paneDiv, listContainer } = buildPaneElement(pane, idx);
+        gridContainer.appendChild(paneDiv);
+        renderPaneItems(pane.id, listContainer);
+        initItemSortable(listContainer, pane.id);
+      });
+      root.appendChild(gridContainer);
+      paneSortable = new Sortable(gridContainer, {
+        animation: 200,
+        handle: '.grid-pane',
+        draggable: '.grid-pane',
+        onEnd: (evt) => {
+          const newOrder = Array.from(gridContainer.children).map(child => {
+            const id = parseInt(child.getAttribute('data-pane-id'));
+            return S.panes.find(p => p.id === id);
+          }).filter(p => p);
+          if(newOrder.length === S.panes.length) {
+            pushHistory();
+            S.panes = newOrder;
+            saveLocal();
+          }
+        },
+        ghostClass: 'pane-drag-placeholder'
+      });
+    }
+    document.documentElement.style.setProperty('--fs', S.fs + 'px');
+    document.getElementById('fsV').innerText = S.fs;
+    document.getElementById('pwV').innerText = S.paneMinWidth;
+    document.documentElement.style.setProperty('--pane-min-width', S.paneMinWidth + 'px');
+    if(S.layoutMode === 'split') document.documentElement.style.setProperty('--split', S.splitPercent + '%');
+    else document.documentElement.style.removeProperty('--split');
+  }
+  
+  function initSplitterDrag(handle, container) {
+    if(!handle) return;
     let isResizing = false;
-    let startClientX = 0;
-    let startSplit = S.split;
     const onMove = (e) => {
       if(!isResizing) return;
       e.preventDefault();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const rect = workspaceRoot.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
       let percent = ((clientX - rect.left) / rect.width) * 100;
       percent = Math.min(82, Math.max(18, percent));
-      if(percent !== S.split) {
-        S.split = percent;
-        document.documentElement.style.setProperty('--split', S.split + '%');
-        document.getElementById('spV').innerText = Math.round(S.split);
-        const range = document.querySelector('.sbox input[type="range"]');
-        if(range) range.value = S.split;
+      if(Math.abs(percent - S.splitPercent) > 0.2) {
+        S.splitPercent = percent;
+        document.documentElement.style.setProperty('--split', S.splitPercent + '%');
         saveLocal();
       }
     };
-    const stopResize = () => {
+    const stop = () => {
       if(isResizing) {
         isResizing = false;
         window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', stopResize);
+        window.removeEventListener('mouseup', stop);
         window.removeEventListener('touchmove', onMove);
-        window.removeEventListener('touchend', stopResize);
+        window.removeEventListener('touchend', stop);
         document.body.style.touchAction = '';
       }
     };
-    const startDrag = (e) => {
+    const start = (e) => {
       e.preventDefault();
       isResizing = true;
-      startSplit = S.split;
-      startClientX = e.touches ? e.touches[0].clientX : e.clientX;
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', stopResize);
-      window.addEventListener('touchmove', onMove, { passive: false });
-      window.addEventListener('touchend', stopResize);
       document.body.style.touchAction = 'none';
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', stop);
+      window.addEventListener('touchmove', onMove, { passive: false });
+      window.addEventListener('touchend', stop);
     };
-    splitHandle.addEventListener('mousedown', startDrag);
-    splitHandle.addEventListener('touchstart', startDrag, { passive: false });
+    handle.addEventListener('mousedown', start);
+    handle.addEventListener('touchstart', start, { passive: false });
   }
   
-  // Layout cycling
-  const presets = [50, 35, 65, 42, 58, 30, 70];
-  let presetIdx = 0;
-  function cycleLayoutPreset() {
-    const curr = S.split;
-    let next = presets[(presets.findIndex(p => Math.abs(p-curr)<1) + 1) % presets.length];
-    if(next === undefined) next = 50;
-    S.split = next;
-    document.documentElement.style.setProperty('--split', S.split + '%');
-    document.getElementById('spV').innerText = Math.round(S.split);
-    const slider = document.querySelector('.sbox input[type="range"]');
-    if(slider) slider.value = S.split;
-    saveLocal();
-    if(navigator.vibrate) navigator.vibrate(15);
-  }
-  function setSplitFromSlider(val) {
-    S.split = parseFloat(val);
-    document.documentElement.style.setProperty('--split', S.split + '%');
-    document.getElementById('spV').innerText = Math.round(S.split);
-    saveLocal();
-  }
-  function setGlobalFont(val) {
-    S.fs = parseInt(val);
-    document.documentElement.style.setProperty('--fs', S.fs + 'px');
-    document.getElementById('fsV').innerText = S.fs;
-    saveLocal();
-    fullRebuildUI();
-  }
-  function exportBackup() {
-    const dataStr = JSON.stringify(S, null, 2);
-    const blob = new Blob([dataStr], {type: 'application/json'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'smart_lists_backup.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-  function escapeHtml(str) { return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]); }
+  function setGlobalFont(val) { S.fs = parseInt(val); saveLocal(); fullRebuildUI(); }
+  function setPaneMinWidth(val) { S.paneMinWidth = parseInt(val); document.getElementById('pwV').innerText = val; document.documentElement.style.setProperty('--pane-min-width', val + 'px'); if(S.layoutMode === 'grid') fullRebuildUI(); else saveLocal(); }
+  function filterAllLists() { fullRebuildUI(); }
+  function exportBackup() { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(S)])); a.download='pro_lists_final.json'; a.click(); }
   function showModal(id) { document.getElementById('mo').style.display='block'; document.getElementById(id).style.display='block'; }
-  function closeModal() { document.querySelectorAll('.modal, #mo').forEach(el=>el.style.display='none'); }
+  function closeModal() { document.querySelectorAll('.modal,#mo').forEach(el=>el.style.display='none'); }
+  function copyJoinToClipboard() { navigator.clipboard.writeText(document.getElementById('joinResult').value); closeModal(); }
+  function escapeHtml(str) { return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]); }
   
-  // Build workspace DOM
-  function buildWorkspace() {
-    workspaceRoot = document.getElementById('workspaceRoot');
-    workspaceRoot.innerHTML = '';
-    leftPaneDiv = document.createElement('div');
-    leftPaneDiv.className = 'pane-left';
-    rightPaneDiv = document.createElement('div');
-    rightPaneDiv.className = 'pane-right';
-    splitHandle = document.createElement('div');
-    splitHandle.className = 'split-handle';
-    workspaceRoot.append(leftPaneDiv, splitHandle, rightPaneDiv);
-    initSplitterDrag();
-    fullRebuildUI();
+  // Toolbar toggle with persistent arrow
+  function initToolbarToggle() {
+    const toolbar = document.getElementById('toolbar');
+    const toggleBtn = document.getElementById('toggleToolbarBtn');
+    const applyState = () => {
+      if (S.toolbarCollapsed) {
+        toolbar.classList.add('collapsed');
+        toggleBtn.innerHTML = '▼ Show';
+        toggleBtn.setAttribute('data-tip', 'Show toolbar');
+      } else {
+        toolbar.classList.remove('collapsed');
+        toggleBtn.innerHTML = '▲ Hide';
+        toggleBtn.setAttribute('data-tip', 'Hide toolbar');
+      }
+    };
+    toggleBtn.addEventListener('click', () => {
+      S.toolbarCollapsed = !S.toolbarCollapsed;
+      saveLocal();
+      applyState();
+    });
+    applyState();
   }
   
   function init() {
-    buildWorkspace();
-    document.documentElement.style.setProperty('--split', S.split + '%');
-    document.documentElement.style.setProperty('--fs', S.fs + 'px');
-    document.getElementById('fsV').innerText = S.fs;
-    document.getElementById('spV').innerText = Math.round(S.split);
-    const rangeInput = document.querySelector('.sbox input[type="range"]');
-    if(rangeInput) rangeInput.value = S.split;
-    saveLocal();
+    enforceLayoutConsistency();
+    fullRebuildUI();
+    initToolbarToggle();
+    document.getElementById('layoutToggleBtn').innerHTML = S.layoutMode === 'split' ? '📐 Grid Mode' : '🔲 Split Mode';
   }
   
-  window.undo = undo; window.redo = redo; window.addNewPane = addNewPane;
-  window.cycleLayoutPreset = cycleLayoutPreset; window.setGlobalFont = setGlobalFont;
-  window.setSplitFromSlider = setSplitFromSlider; window.exportBackup = exportBackup;
-  window.closeModal = closeModal;
+  window.undo = undo; window.redo = redo; window.addPane = addPane; window.toggleLayoutMode = toggleLayoutMode;
+  window.setGlobalFont = setGlobalFont; window.setPaneMinWidth = setPaneMinWidth; window.filterAllLists = filterAllLists;
+  window.exportBackup = exportBackup; window.closeModal = closeModal; window.copyJoinToClipboard = copyJoinToClipboard;
   init();
 </script>
 </body>
